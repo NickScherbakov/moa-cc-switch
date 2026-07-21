@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moa-engine"
+version = "0.1.0"
+description = "Autonomous Mixture-of-Agents engine with CC Switch routing and deterministic verification"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+moa-run = "moa_engine.runner:cli"
