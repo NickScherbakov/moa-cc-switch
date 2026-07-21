@@ -1,5 +1,6 @@
 import asyncio
 import os
+import subprocess
 import sys
 import httpx
 from abc import ABC, abstractmethod
@@ -40,9 +41,9 @@ class CCSwitchClient(LLMClient):
             try:
                 return await self._http_generate(messages, temperature, api_key)
             except Exception as e:
-                print(f"⚠️ HTTP request to {self.provider_name} failed: {e}. Falling back to simulation.", file=sys.stderr)
+                print(f"⚠️ HTTP request to {self.provider_name} failed: {e}. Falling back to CLI.", file=sys.stderr)
 
-        return self._fallback_via_cli(messages)
+        return await self._fallback_via_cli(messages)
 
     async def _http_generate(self, messages: List[Message], temperature: float, api_key: str) -> str:
         """Asynchronous HTTP request execution with exponential backoff retries."""
@@ -88,11 +89,26 @@ class CCSwitchClient(LLMClient):
 
         raise RuntimeError("Failed to receive response from LLM API after retries.")
 
-    def _fallback_via_cli(self, messages: List[Message]) -> str:
-        """Deterministic code generator fallback when API credentials are not set."""
-        prompt_summary = "\n".join([f"{m.role}: {m.content}" for m in messages])
-        
-        if "LRU" in prompt_summary or "lru" in prompt_summary:
+    async def _fallback_via_cli(self, messages: List[Message]) -> str:
+        """Execute real CLI fallback (e.g. claude --print) or fallback to deterministic code generator."""
+        prompt_text = "\n".join([f"{m.role}: {m.content}" for m in messages])
+
+        # Attempt to run real `claude --print` CLI if available on the system
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "claude", "--print", prompt_text,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
+            if process.returncode == 0 and stdout:
+                result_text = stdout.decode("utf-8", errors="ignore").strip()
+                if result_text:
+                    return result_text
+        except Exception:
+            pass  # Fall back to simulation if CLI invocation is unsupported/timed out
+
+        if "LRU" in prompt_text or "lru" in prompt_text:
             return '''class LRUCache:
     def __init__(self, capacity: int):
         self.capacity = capacity

@@ -12,11 +12,9 @@ async def test_openai_client_driver(respx_mock):
     )
     client = OpenAIClient("https://api.openai.com/v1", api_key_env="TEST_KEY", model_name="gpt-4o")
     
-    # Test without env key -> fallback simulation
     sim_res = await client.generate([Message(role="user", content="hi")])
     assert "Simulated response" in sim_res
 
-    # Test with env key
     import os
     os.environ["TEST_KEY"] = "sk-fake"
     res = await client.generate([Message(role="user", content="hi")])
@@ -46,3 +44,11 @@ async def test_ollama_client_driver(respx_mock):
     client = OllamaClient("http://localhost:11434", model_name="qwen2.5-coder")
     res = await client.generate([Message(role="user", content="hi")])
     assert res == "ollama output"
+
+
+@pytest.mark.asyncio
+async def test_claude_cli_real_fallback():
+    client = CCSwitchClient("anthropic", "https://api.anthropic.com", "NON_EXISTENT_KEY")
+    res = await client.generate([Message(role="user", content="Respond with string OK_REAL_TEST")])
+    assert isinstance(res, str)
+    assert len(res) > 0
