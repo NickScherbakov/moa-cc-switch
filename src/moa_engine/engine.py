@@ -1,8 +1,8 @@
 import asyncio
 import sys
-from typing import List
+from typing import List, Optional
 
-from moa_engine.agents import AggregatorAgent, ProposerAgent
+from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
 from moa_engine.domain import Artifact, Task
 from moa_engine.verifiers import VerifierStrategy
 
@@ -11,7 +11,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 class MoAOrchestrator:
-    """Core autonomous Mixture-of-Agents orchestrator."""
+    """Core autonomous Mixture-of-Agents orchestrator with optional Critic step."""
 
     def __init__(
         self,
@@ -19,12 +19,14 @@ class MoAOrchestrator:
         aggregator: AggregatorAgent,
         verifier: VerifierStrategy,
         output_path: str,
+        critic: Optional[CriticAgent] = None,
         max_iterations: int = 50,
     ):
         self._proposers = proposers
         self._aggregator = aggregator
         self._verifier = verifier
         self._output_path = output_path
+        self._critic = critic
         self._max_iterations = max_iterations
 
     async def run_until_proven(self, task_description: str) -> bool:
@@ -42,7 +44,11 @@ class MoAOrchestrator:
                 await asyncio.sleep(1)
                 continue
 
-            code = await self._aggregator.process_proposals(task, proposals)
+            critique = ""
+            if self._critic:
+                critique = await self._critic.process(task)
+
+            code = await self._aggregator.process_proposals(task, proposals, critique=critique)
             artifact = Artifact(path=self._output_path, content=code)
 
             result = self._verifier.verify(artifact)

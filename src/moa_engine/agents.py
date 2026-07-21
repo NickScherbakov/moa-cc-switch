@@ -20,6 +20,10 @@ class Agent(ABC):
 class ProposerAgent(Agent):
     """Agent responsible for generating initial code solutions and fix proposals."""
 
+    def __init__(self, client: LLMClient, temperature: float = 0.7):
+        super().__init__(client)
+        self.temperature = temperature
+
     async def process(self, task: Task) -> str:
         messages = [
             Message(
@@ -37,16 +41,35 @@ class ProposerAgent(Agent):
                 ),
             ),
         ]
-        return await self._client.generate(messages, temperature=0.7)
+        return await self._client.generate(messages, temperature=self.temperature)
+
+
+class CriticAgent(Agent):
+    """Agent responsible for reviewing proposals for security, edge cases, and PEP8 compliance."""
+
+    async def process(self, task: Task) -> str:
+        messages = [
+            Message(
+                role="system",
+                content="Вы — старейший ревьюер кода (Critic). Проанализируйте задачу и дайте критические указания по потенциальным багам.",
+            ),
+            Message(
+                role="user",
+                content=f"Задача: {task.description}\nОшибки: {task.error_history}",
+            ),
+        ]
+        return await self._client.generate(messages, temperature=0.2)
 
 
 class AggregatorAgent(Agent):
     """Agent responsible for synthesizing multiple proposals into a single optimal code solution."""
 
-    async def process_proposals(self, task: Task, proposals: List[str]) -> str:
+    async def process_proposals(self, task: Task, proposals: List[str], critique: str = "") -> str:
         proposals_formatted = "\n---\n".join(
             [f"Вариант {i+1}:\n{p}" for i, p in enumerate(proposals)]
         )
+        critique_section = f"\nЗамечания критика:\n{critique}\n" if critique else ""
+        
         messages = [
             Message(
                 role="system",
@@ -59,7 +82,8 @@ class AggregatorAgent(Agent):
                 role="user",
                 content=(
                     f"Задача: {task.description}\n\n"
-                    f"Предложения от агентов:\n{proposals_formatted}\n\n"
+                    f"Предложения от агентов:\n{proposals_formatted}\n"
+                    f"{critique_section}\n"
                     f"История ошибок:\n{task.error_history}\n\n"
                     "Верните ТОЛЬКО итоговый Python-код."
                 ),

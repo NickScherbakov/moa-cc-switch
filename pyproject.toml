@@ -4,11 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moa-engine"
-version = "0.1.0"
-description = "Autonomous Mixture-of-Agents engine with CC Switch routing and deterministic verification"
+version = "0.2.0"
+description = "Autonomous Mixture-of-Agents engine with CC Switch routing, HTTP transport, and deterministic verification"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "respx>=0.21.0"
+]
 
 [project.scripts]
 moa-run = "moa_engine.runner:cli"
