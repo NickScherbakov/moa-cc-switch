@@ -83,8 +83,9 @@ classDiagram
     MoAOrchestrator o-- VerifierStrategy
     MoAOrchestrator ..> Artifact
     MoAOrchestrator ..> Task
+```
 
-🏛 Архитектурные принципы (SOLID)
+## 🏛 Архитектурные принципы (SOLID)
 
 Single Responsibility (SRP): Клиент отвечает за транспорт, Агент — за промпты и роль, Верификатор — за проверку, Оркестратор — за главный цикл.
 
@@ -96,8 +97,8 @@ Interface Segregation (ISP): Узкие сущности Message, Task, Artifact
 
 Dependency Inversion (DIP): Оркестратор зависит только от абстракций.
 
-🛠 Установка и запуск
-Bash
+## 🛠 Установка и запуск
+```bash
 # 1. Распаковать архив и перейти в папку
 unzip moa-cc-switch.zip
 cd moa-cc-switch
@@ -107,5 +108,6 @@ pip install -e .
 
 # 3. Запустить CLI
 moa-run --task "Напиши кастомный LRU-кэш" --verify "pytest tests/test_lru_cache.py" --out "lru_cache.py"
+```
 
 
