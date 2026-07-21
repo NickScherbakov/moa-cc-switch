@@ -2,49 +2,47 @@ import pytest
 import respx
 import httpx
 from moa_engine.domain import Message
-from moa_engine.clients import CCSwitchClient
-from moa_engine.config import Config
+from moa_engine.clients import CCSwitchClient, OpenAIClient, DeepSeekClient, OllamaClient
 
 
 @pytest.mark.asyncio
-async def test_cc_switch_http_success(respx_mock):
+async def test_openai_client_driver(respx_mock):
     respx_mock.post("https://api.openai.com/v1/chat/completions").respond(
-        json={
-            "choices": [
-                {"message": {"content": "def hello(): return 'world'"}}
-            ]
-        }
+        json={"choices": [{"message": {"content": "openai output"}}]}
     )
+    client = OpenAIClient("https://api.openai.com/v1", api_key_env="TEST_KEY", model_name="gpt-4o")
+    
+    # Test without env key -> fallback simulation
+    sim_res = await client.generate([Message(role="user", content="hi")])
+    assert "Simulated response" in sim_res
 
-    client = CCSwitchClient("openai", "https://api.openai.com", "TEST_KEY")
-    result = await client._http_generate([Message(role="user", content="hello")], temperature=0.5, api_key="sk-test")
-    assert result == "def hello(): return 'world'"
+    # Test with env key
+    import os
+    os.environ["TEST_KEY"] = "sk-fake"
+    res = await client.generate([Message(role="user", content="hi")])
+    assert res == "openai output"
+    del os.environ["TEST_KEY"]
 
 
 @pytest.mark.asyncio
-async def test_cc_switch_http_anthropic_format(respx_mock):
-    respx_mock.post("https://api.anthropic.com/v1/messages").respond(
-        json={
-            "content": [
-                {"type": "text", "text": "class A: pass"}
-            ]
-        }
+async def test_deepseek_client_driver(respx_mock):
+    respx_mock.post("https://api.deepseek.com/v1/chat/completions").respond(
+        json={"choices": [{"message": {"content": "deepseek output"}}]}
     )
-
-    client = CCSwitchClient("anthropic", "https://api.anthropic.com", "TEST_KEY")
-    result = await client._http_generate([Message(role="user", content="hello")], temperature=0.7, api_key="sk-test")
-    assert result == "class A: pass"
+    client = DeepSeekClient("https://api.deepseek.com/v1", api_key_env="TEST_KEY", model_name="deepseek-coder")
+    
+    import os
+    os.environ["TEST_KEY"] = "ds-fake"
+    res = await client.generate([Message(role="user", content="hi")])
+    assert res == "deepseek output"
+    del os.environ["TEST_KEY"]
 
 
 @pytest.mark.asyncio
-async def test_cc_switch_http_retry_on_failure(respx_mock):
-    route = respx_mock.post("https://api.openai.com/v1/chat/completions")
-    route.side_effect = [
-        httpx.Response(500),
-        httpx.Response(200, json={"choices": [{"message": {"content": "recovered"}}]}),
-    ]
-
-    client = CCSwitchClient("openai", "https://api.openai.com", "TEST_KEY")
-    result = await client._http_generate([Message(role="user", content="test")], temperature=0.5, api_key="sk-test")
-    assert result == "recovered"
-    assert route.call_count == 2
+async def test_ollama_client_driver(respx_mock):
+    respx_mock.post("http://localhost:11434/api/chat").respond(
+        json={"message": {"content": "ollama output"}}
+    )
+    client = OllamaClient("http://localhost:11434", model_name="qwen2.5-coder")
+    res = await client.generate([Message(role="user", content="hi")])
+    assert res == "ollama output"

@@ -13,3 +13,5 @@ dummy.py
 test_output.py
 test_report.html
 moa_report.html
+moa_report.md
+moa_trace.json

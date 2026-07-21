@@ -1,59 +1,101 @@
 import argparse
 import asyncio
+import os
 import sys
+from typing import List, Optional
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
-from moa_engine.clients import CCSwitchClient
+from moa_engine.clients import CCSwitchClient, DeepSeekClient, OllamaClient, OpenAIClient
 from moa_engine.engine import MoAOrchestrator
+from moa_engine.presets import PresetConfig
 from moa_engine.verifiers import CommandVerifier, CompositeVerifier
 
 console = Console()
 
 
+def build_client_from_config(provider: str, model: str, endpoint: Optional[str] = None, api_key_env: Optional[str] = None):
+    provider_lower = provider.lower()
+    if provider_lower == "openai":
+        return OpenAIClient(endpoint=endpoint or "https://api.openai.com/v1", api_key_env=api_key_env or "OPENAI_API_KEY", model_name=model)
+    elif provider_lower == "deepseek":
+        return DeepSeekClient(endpoint=endpoint or "https://api.deepseek.com/v1", api_key_env=api_key_env or "DEEPSEEK_API_KEY", model_name=model)
+    elif provider_lower == "ollama":
+        return OllamaClient(endpoint=endpoint or "http://localhost:11434", model_name=model)
+    else:
+        return CCSwitchClient(provider_name=provider, endpoint=endpoint or "https://api.anthropic.com", api_key_env=api_key_env or "ANTHROPIC_API_KEY", model_name=model)
+
+
 def cli() -> None:
-    """CLI entry point for running the MoA Engine with Rich UI."""
+    """CLI entry point for running the MoA Engine with Rich UI & Preset support."""
     parser = argparse.ArgumentParser(description="Autonomous MoA Engine")
-    parser.add_argument("--task", required=True, help="Описание задачи")
-    parser.add_argument("--verify", required=True, help="Команда верификации")
+    parser.add_argument("--task", help="Описание задачи")
+    parser.add_argument("--verify", help="Команда верификации")
     parser.add_argument("--out", default="result.py", help="Файл для сохранения")
+    parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")
     args = parser.parse_args()
 
-    console.print(
-        Panel.fit(
-            "[bold cyan]🚀 Mixture-of-Agents Autonomous Engine[/bold cyan]\n"
-            f"[yellow]Task:[/yellow] {args.task}\n"
-            f"[yellow]Target File:[/yellow] {args.out}",
-            title="MoA Engine v0.2.0",
+    task_desc = args.task or "Напиши кастомный LRU-кэш"
+    verify_cmd = args.verify or "pytest tests/test_lru_cache.py"
+    output_path = args.out
+
+    if args.preset and os.path.exists(args.preset):
+        if args.preset.endswith(".yaml") or args.preset.endswith(".yml"):
+            preset = PresetConfig.from_yaml(args.preset)
+        else:
+            preset = PresetConfig.from_json(args.preset)
+
+        console.print(
+            Panel.fit(
+                f"[bold cyan]🚀 Loaded Preset: {preset.preset_name}[/bold cyan]\n"
+                f"[yellow]Task:[/yellow] {task_desc}\n"
+                f"[yellow]Output File:[/yellow] {preset.output_path}",
+                title="MoA Engine Config Preset",
+            )
         )
-    )
+        output_path = preset.output_path
+        
+        proposers = [
+            ProposerAgent(build_client_from_config(p.provider, p.model, p.endpoint, p.api_key_env), temperature=p.temperature)
+            for p in preset.proposers
+        ]
+        critic = CriticAgent(build_client_from_config(preset.critic.provider, preset.critic.model, preset.critic.endpoint, preset.critic.api_key_env)) if preset.critic else None
+        aggregator = AggregatorAgent(build_client_from_config(preset.aggregator.provider, preset.aggregator.model, preset.aggregator.endpoint, preset.aggregator.api_key_env)) if preset.aggregator else AggregatorAgent(CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"))
+    else:
+        console.print(
+            Panel.fit(
+                "[bold cyan]🚀 Mixture-of-Agents Autonomous Engine[/bold cyan]\n"
+                f"[yellow]Task:[/yellow] {task_desc}\n"
+                f"[yellow]Target File:[/yellow] {output_path}",
+                title="MoA Engine v0.3.0",
+            )
+        )
 
-    # Инициализация клиентов через CC Switch proxy / direct providers
-    claude_client = CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY")
-    gpt_client = CCSwitchClient("openai", "https://api.openai.com/v1", "OPENAI_API_KEY")
+        claude_client = CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY")
+        gpt_client = CCSwitchClient("openai", "https://api.openai.com/v1", "OPENAI_API_KEY")
 
-    # Инициализация агентов
-    proposers = [
-        ProposerAgent(gpt_client, temperature=0.8),
-        ProposerAgent(claude_client, temperature=0.3),
-    ]
-    critic = CriticAgent(claude_client)
-    aggregator = AggregatorAgent(claude_client)
-    verifier = CommandVerifier(args.verify)
+        proposers = [
+            ProposerAgent(gpt_client, temperature=0.8),
+            ProposerAgent(claude_client, temperature=0.3),
+        ]
+        critic = CriticAgent(claude_client)
+        aggregator = AggregatorAgent(claude_client)
+
+    verifier = CommandVerifier(verify_cmd)
 
     orchestrator = MoAOrchestrator(
         proposers=proposers,
         aggregator=aggregator,
         verifier=verifier,
-        output_path=args.out,
+        output_path=output_path,
         critic=critic,
     )
 
-    success = asyncio.run(orchestrator.run_until_proven(args.task))
+    success = asyncio.run(orchestrator.run_until_proven(task_desc))
     if success:
         console.print("[bold green]✨ Orchestration completed successfully![/bold green]")
+        console.print("[cyan]Generated reports: moa_report.html, moa_report.md, moa_trace.json[/cyan]")
     else:
         console.print("[bold red]❌ Orchestration stopped: max iterations reached.[/bold red]")
 

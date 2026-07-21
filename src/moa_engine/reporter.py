@@ -1,19 +1,22 @@
+import json
 import os
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass, field, asdict
+from typing import List, Dict, Any
 
 
 @dataclass
 class IterationLog:
     iteration: int
     proposals_count: int
-    critique_snippet: str
-    is_success: bool
-    verification_log: str
+    proposals_snippets: List[str] = field(default_factory=list)
+    critique_snippet: str = ""
+    aggregated_code: str = ""
+    is_success: bool = False
+    verification_log: str = ""
 
 
 class ExecutionReporter:
-    """Generates structured HTML and Markdown execution reports for MoA runs."""
+    """Generates structured HTML, Markdown, and JSON execution traces for MoA runs."""
 
     def __init__(self):
         self.logs: List[IterationLog] = []
@@ -22,7 +25,9 @@ class ExecutionReporter:
         self,
         iteration: int,
         proposals_count: int,
+        proposals_snippets: List[str],
         critique_snippet: str,
+        aggregated_code: str,
         is_success: bool,
         verification_log: str,
     ) -> None:
@@ -30,11 +35,41 @@ class ExecutionReporter:
             IterationLog(
                 iteration=iteration,
                 proposals_count=proposals_count,
+                proposals_snippets=proposals_snippets,
                 critique_snippet=critique_snippet,
+                aggregated_code=aggregated_code,
                 is_success=is_success,
                 verification_log=verification_log,
             )
         )
+
+    def generate_json_trace(self, output_file: str = "moa_trace.json") -> str:
+        data = {
+            "total_iterations": len(self.logs),
+            "final_success": self.logs[-1].is_success if self.logs else False,
+            "iterations": [asdict(log) for log in self.logs],
+        }
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return output_file
+
+    def generate_markdown_report(self, output_file: str = "moa_report.md") -> str:
+        md = ["# 🚀 MoA Engine Execution Trace\n"]
+        md.append(f"- Total Iterations: **{len(self.logs)}**\n")
+
+        for log in self.logs:
+            status = "✅ PASSED" if log.is_success else "❌ FAILED"
+            md.append(f"## Iteration {log.iteration} - {status}\n")
+            md.append(f"- **Proposals Count**: {log.proposals_count}\n")
+            if log.critique_snippet:
+                md.append(f"### Critique\n```\n{log.critique_snippet}\n```\n")
+            md.append(f"### Aggregated Code\n```python\n{log.aggregated_code}\n```\n")
+            md.append(f"### Verification Log\n```\n{log.verification_log}\n```\n")
+
+        content = "\n".join(md)
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        return output_file
 
     def generate_html_report(self, output_file: str = "moa_report.html") -> str:
         html_content = f"""<!DOCTYPE html>
@@ -65,6 +100,10 @@ class ExecutionReporter:
     <div class="card {card_class}">
         <h2>Iteration {log.iteration} {badge}</h2>
         <p>Proposals Evaluated: {log.proposals_count}</p>
+        <details>
+            <summary>Aggregated Code</summary>
+            <pre><code>{log.aggregated_code}</code></pre>
+        </details>
         <details>
             <summary>Verification Logs</summary>
             <pre>{log.verification_log}</pre>
