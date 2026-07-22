@@ -1,0 +1,50 @@
+{
+  "preset_name": "infolimp-audit",
+  "description": "Multi-agent website audit: 4 proposers (claude, agy, codex, gemini) + copilot critic + kiro aggregator",
+  "max_iterations": 3,
+  "output_path": "result.md",
+  "proposers": [
+    {
+      "name": "claude-proposer",
+      "role": "proposer",
+      "provider": "claude-cli",
+      "model": "default",
+      "temperature": 0.5
+    },
+    {
+      "name": "agy-proposer",
+      "role": "proposer",
+      "provider": "antigravity",
+      "model": "default",
+      "temperature": 0.6
+    },
+    {
+      "name": "codex-proposer",
+      "role": "proposer",
+      "provider": "codex-cli",
+      "model": "default",
+      "temperature": 0.4
+    },
+    {
+      "name": "gemini-proposer",
+      "role": "proposer",
+      "provider": "gemini-cli",
+      "model": "default",
+      "temperature": 0.5
+    }
+  ],
+  "critic": {
+    "name": "copilot-critic",
+    "role": "critic",
+    "provider": "copilot-cli",
+    "model": "default",
+    "temperature": 0.3
+  },
+  "aggregator": {
+    "name": "kiro-aggregator",
+    "role": "aggregator",
+    "provider": "kiro-cli",
+    "model": "default",
+    "temperature": 0.4
+  }
+}

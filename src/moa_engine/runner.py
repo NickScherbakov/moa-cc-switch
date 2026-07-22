@@ -7,7 +7,17 @@ from rich.console import Console
 from rich.panel import Panel
 
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
-from moa_engine.clients import CCSwitchClient, DeepSeekClient, OllamaClient, OpenAIClient
+from moa_engine.clients import (
+    AntigravityCLIClient,
+    CCSwitchClient,
+    ClaudeCLIClient,
+    CodexCLIClient,
+    CopilotCLIClient,
+    DeepSeekClient,
+    GeminiCLIClient,
+    OllamaClient,
+    OpenAIClient,
+)
 from moa_engine.engine import MoAOrchestrator
 from moa_engine.presets import PresetConfig
 from moa_engine.verifiers import CommandVerifier, CompositeVerifier
@@ -17,7 +27,17 @@ console = Console()
 
 def build_client_from_config(provider: str, model: str, endpoint: Optional[str] = None, api_key_env: Optional[str] = None):
     provider_lower = provider.lower()
-    if provider_lower == "openai":
+    if provider_lower in ("antigravity-cli", "antigravity", "agy"):
+        return AntigravityCLIClient()
+    elif provider_lower in ("claude-cli", "claude"):
+        return ClaudeCLIClient()
+    elif provider_lower in ("copilot-cli", "copilot"):
+        return CopilotCLIClient()
+    elif provider_lower in ("codex-cli", "codex"):
+        return CodexCLIClient()
+    elif provider_lower in ("gemini-cli", "gemini"):
+        return GeminiCLIClient()
+    elif provider_lower == "openai":
         return OpenAIClient(endpoint=endpoint or "https://api.openai.com/v1", api_key_env=api_key_env or "OPENAI_API_KEY", model_name=model)
     elif provider_lower == "deepseek":
         return DeepSeekClient(endpoint=endpoint or "https://api.deepseek.com/v1", api_key_env=api_key_env or "DEEPSEEK_API_KEY", model_name=model)
@@ -25,6 +45,7 @@ def build_client_from_config(provider: str, model: str, endpoint: Optional[str] 
         return OllamaClient(endpoint=endpoint or "http://localhost:11434", model_name=model)
     else:
         return CCSwitchClient(provider_name=provider, endpoint=endpoint or "https://api.anthropic.com", api_key_env=api_key_env or "ANTHROPIC_API_KEY", model_name=model)
+
 
 
 def cli() -> None:

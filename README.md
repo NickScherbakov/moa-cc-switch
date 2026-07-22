@@ -9,6 +9,62 @@
 
 ---
 
+## 🤖 Поддерживаемые провайдеры
+
+| Ключ провайдера | Клиент | Способ вызова |
+|---|---|---|
+| `anthropic`, `ccswitch` | `CCSwitchClient` | HTTP + fallback CLI |
+| `openai` | `OpenAIClient` | HTTP |
+| `deepseek` | `DeepSeekClient` | HTTP |
+| `ollama` | `OllamaClient` | HTTP (localhost) |
+| `claude`, `claude-cli` | `ClaudeCLIClient` | `claude --print` |
+| `copilot`, `copilot-cli` | `CopilotCLIClient` | `copilot -p ... --yolo` |
+| `codex`, `codex-cli` | `CodexCLIClient` | `codex exec` |
+| `gemini`, `gemini-cli` | `GeminiCLIClient` | `gemini -p` |
+| `antigravity`, `agy` | `AntigravityCLIClient` | `agy -p ... --dangerously-skip-permissions` |
+| **`kiro`, `kiro-cli`** | **`KiroCLIClient`** | **`kiro --print` / `-p` / stdin** |
+
+---
+
+## 🆕 Kiro CLI Integration
+
+В состав провайдеров добавлен **`KiroCLIClient`** — интеграция с локально установленным [Kiro CLI](https://kiro.dev).
+
+Клиент реализует трёхшаговую fallback-стратегию:
+
+```
+kiro --print "<prompt>"   →   kiro -p "<prompt>"   →   kiro (stdin pipe)
+```
+
+- Таймаут каждого шага — 45 секунд (`asyncio.wait_for`)
+- При недоступности бинарника или ошибке возвращает строку `"# Kiro CLI error: ..."` — пайплайн не падает
+- Диагностика пишется в `sys.stderr`, не засоряя stdout
+- Новых зависимостей не добавляется — используются только `asyncio`, `subprocess`, `sys`
+
+### Использование в пресете
+
+```json
+{
+  "proposers": [
+    { "provider": "kiro", "model": "default" },
+    { "provider": "claude", "model": "default" }
+  ],
+  "aggregator": { "provider": "kiro-cli", "model": "default" }
+}
+```
+
+### Использование в коде
+
+```python
+from moa_engine.clients import KiroCLIClient
+from moa_engine.domain import Message
+
+client = KiroCLIClient()
+response = await client.generate([Message(role="user", content="Write a Python function")])
+```
+
+---
+
 ## 📐 Диаграмма классов (Class Diagram)
 
 ```mermaid
@@ -44,7 +100,11 @@ classDiagram
         -_http_generate(...) str
         -_fallback_via_cli(messages: List~Message~) str
     }
+    class KiroCLIClient {
+        +generate(messages: List~Message~, temperature: float) str
+    }
     LLMClient <|.. CCSwitchClient
+    LLMClient <|.. KiroCLIClient
 
     class Agent {
         <<abstract>>
@@ -150,3 +210,17 @@ moa-run --task "Напиши кастомный LRU-кэш" --verify "pytest tes
 ```bash
 pytest
 ```
+
+### 5. Тесты CLI-агентов (включая Kiro)
+```bash
+pytest tests/test_cli_agents.py -v
+```
+
+---
+
+## 👥 Авторы и соавторы
+
+| Роль | Участник | Вклад |
+|---|---|---|
+| Автор проекта | [NickScherbakov](https://github.com/NickScherbakov) | Архитектура MoA Engine, CC Switch, HTTP-транспорт, CLI-агенты, верификация |
+| Соавтор | [Kiro](https://kiro.dev) (AI-ассистент) | Спецификация и реализация `KiroCLIClient`, обновление документации, spec-driven разработка интеграции |
