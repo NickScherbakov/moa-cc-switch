@@ -19,6 +19,93 @@ class LLMClient(ABC):
         pass
 
 
+class HTTPDialect(ABC):
+    """Strategy interface for provider-specific HTTP protocol variations."""
+
+    @abstractmethod
+    def get_url(self, endpoint: str) -> str:
+        """Construct full API URL from base endpoint."""
+        pass
+
+    @abstractmethod
+    def get_headers(self, api_key: str) -> Dict[str, str]:
+        """Construct HTTP headers including authentication and API versioning."""
+        pass
+
+    @abstractmethod
+    def get_payload(
+        self, model_name: str, messages: List[Message], temperature: float
+    ) -> Dict[str, Any]:
+        """Construct request JSON payload."""
+        pass
+
+    @abstractmethod
+    def parse_response(self, data: Dict[str, Any]) -> str:
+        """Extract generated text content from API response dictionary."""
+        pass
+
+
+class AnthropicDialect(HTTPDialect):
+    """Dialect for Anthropic Messages API format."""
+
+    def get_url(self, endpoint: str) -> str:
+        base = endpoint.rstrip("/")
+        return f"{base}/v1/messages" if not base.endswith("/v1") else f"{base}/messages"
+
+    def get_headers(self, api_key: str) -> Dict[str, str]:
+        return {
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+
+    def get_payload(
+        self, model_name: str, messages: List[Message], temperature: float
+    ) -> Dict[str, Any]:
+        return {
+            "model": model_name,
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "temperature": temperature,
+            "max_tokens": 4096,
+        }
+
+    def parse_response(self, data: Dict[str, Any]) -> str:
+        if "content" in data:
+            content = data["content"]
+            if isinstance(content, list) and len(content) > 0:
+                return content[0].get("text", "")
+            return str(content)
+        return str(data)
+
+
+class OpenAIDialect(HTTPDialect):
+    """Dialect for OpenAI Chat Completions API format (default for OpenAI, DeepSeek, etc.)."""
+
+    def get_url(self, endpoint: str) -> str:
+        base = endpoint.rstrip("/")
+        return f"{base}/v1/chat/completions" if not base.endswith("/v1") else f"{base}/chat/completions"
+
+    def get_headers(self, api_key: str) -> Dict[str, str]:
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+
+    def get_payload(
+        self, model_name: str, messages: List[Message], temperature: float
+    ) -> Dict[str, Any]:
+        return {
+            "model": model_name,
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "temperature": temperature,
+        }
+
+    def parse_response(self, data: Dict[str, Any]) -> str:
+        if "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+        return str(data)
+
+
 class CCSwitchClient(LLMClient):
     """Client routing requests through CC Switch proxy or direct LLM APIs with HTTPX & Retry logic."""
 
@@ -28,11 +115,13 @@ class CCSwitchClient(LLMClient):
         endpoint: str,
         api_key_env: str,
         model_name: str = "claude-3-5-sonnet-20241022",
+        dialect: Optional[HTTPDialect] = None,
     ):
         self.provider_name = provider_name
         self.endpoint = endpoint.rstrip("/")
         self.api_key_env = api_key_env
         self.model_name = model_name
+        self._dialect = dialect or (AnthropicDialect() if "anthropic" in provider_name.lower() else OpenAIDialect())
 
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         api_key = os.getenv(self.api_key_env, "")
@@ -46,27 +135,10 @@ class CCSwitchClient(LLMClient):
         return await self._fallback_via_cli(messages)
 
     async def _http_generate(self, messages: List[Message], temperature: float, api_key: str) -> str:
-        """Asynchronous HTTP request execution with exponential backoff retries."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        }
-        if "anthropic" in self.provider_name.lower():
-            headers["x-api-key"] = api_key
-            headers["anthropic-version"] = "2023-06-01"
-
-        payload: Dict[str, Any] = {
-            "model": self.model_name,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
-            "max_tokens": 4096,
-        }
-
-        base = self.endpoint
-        if "anthropic" in self.provider_name.lower():
-            url = f"{base}/v1/messages" if not base.endswith("/v1") else f"{base}/messages"
-        else:
-            url = f"{base}/v1/chat/completions" if not base.endswith("/v1") else f"{base}/chat/completions"
+        """Asynchronous HTTP request execution with exponential backoff retries using Strategy pattern."""
+        headers = self._dialect.get_headers(api_key)
+        payload = self._dialect.get_payload(self.model_name, messages, temperature)
+        url = self._dialect.get_url(self.endpoint)
 
         async with httpx.AsyncClient(timeout=config.timeout_seconds) as http_client:
             for attempt in range(1, config.max_retries + 1):
@@ -74,20 +146,14 @@ class CCSwitchClient(LLMClient):
                     response = await http_client.post(url, json=payload, headers=headers)
                     response.raise_for_status()
                     data = response.json()
-                    
-                    if "choices" in data:
-                        return data["choices"][0]["message"]["content"]
-                    elif "content" in data:
-                        if isinstance(data["content"], list):
-                            return data["content"][0].get("text", "")
-                        return str(data["content"])
-                    return str(data)
+                    return self._dialect.parse_response(data)
                 except (httpx.HTTPStatusError, httpx.RequestError) as err:
                     if attempt == config.max_retries:
                         raise err
                     await asyncio.sleep(config.retry_backoff_factor ** attempt)
 
         raise RuntimeError("Failed to receive response from LLM API after retries.")
+
 
     async def _fallback_via_cli(self, messages: List[Message]) -> str:
         """Execute real CLI fallback via cc-switch utility."""
