@@ -30,14 +30,22 @@ def test_domain_dataclasses():
 
 
 @pytest.mark.asyncio
-async def test_cc_switch_client():
+async def test_cc_switch_client(respx_mock, monkeypatch):
+    monkeypatch.setenv("MOCK_KEY", "mock-token")
+    respx_mock.post("http://localhost:8080/v1/chat/completions").respond(
+        json={"choices": [{"message": {"content": "class LRUCache:\n    pass"}}]}
+    )
     client = CCSwitchClient("test-provider", "http://localhost:8080", "MOCK_KEY")
     res = await client.generate([Message(role="user", content="Implement lru_cache")])
     assert "LRUCache" in res
 
 
 @pytest.mark.asyncio
-async def test_agents():
+async def test_agents(respx_mock, monkeypatch):
+    monkeypatch.setenv("MOCK_KEY", "mock-token")
+    respx_mock.post("http://localhost:8080/v1/chat/completions").respond(
+        json={"choices": [{"message": {"content": "class LRUCache:\n    pass"}}]}
+    )
     client = CCSwitchClient("test-provider", "http://localhost:8080", "MOCK_KEY")
     proposer = ProposerAgent(client)
     aggregator = AggregatorAgent(client)
@@ -51,11 +59,16 @@ async def test_agents():
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_flow():
+async def test_orchestrator_flow(respx_mock, monkeypatch):
+    monkeypatch.setenv("MOCK_KEY", "mock-token")
+    respx_mock.post("http://localhost:8080/v1/chat/completions").respond(
+        json={"choices": [{"message": {"content": "class LRUCache:\n    pass"}}]}
+    )
     client = CCSwitchClient("test-provider", "http://localhost:8080", "MOCK_KEY")
     proposer = ProposerAgent(client)
     aggregator = AggregatorAgent(client)
     verifier = CommandVerifier("python -c \"import os; assert os.path.exists('test_output.py')\"")
+
 
     orchestrator = MoAOrchestrator(
         proposers=[proposer],
@@ -70,3 +83,4 @@ async def test_orchestrator_flow():
     assert os.path.exists("test_output.py")
     if os.path.exists("test_output.py"):
         os.remove("test_output.py")
+

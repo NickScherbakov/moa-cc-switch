@@ -1,5 +1,7 @@
+import os
 import pytest
 import shutil
+
 from moa_engine.domain import Message
 from moa_engine.clients import (
     AntigravityCLIClient,
@@ -61,12 +63,16 @@ async def test_cli_agents_orchestration_interaction():
         proposers=[claude_proposer, copilot_proposer],
         aggregator=aggregator,
         verifier=verifier,
-        output_path="lru_cache.py",
+        output_path="test_lru_cache_output.py",
         max_iterations=1,
     )
-    
+
     result = await orchestrator.run_until_proven("Write LRUCache class")
     assert isinstance(result, bool)
+    if os.path.exists("test_lru_cache_output.py"):
+        os.remove("test_lru_cache_output.py")
+
+
 
 
 @pytest.mark.asyncio

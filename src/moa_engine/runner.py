@@ -15,6 +15,7 @@ from moa_engine.clients import (
     CopilotCLIClient,
     DeepSeekClient,
     GeminiCLIClient,
+    KiroCLIClient,
     OllamaClient,
     OpenAIClient,
 )
@@ -37,6 +38,8 @@ def build_client_from_config(provider: str, model: str, endpoint: Optional[str] 
         return CodexCLIClient()
     elif provider_lower in ("gemini-cli", "gemini"):
         return GeminiCLIClient()
+    elif provider_lower in ("kiro-cli", "kiro"):
+        return KiroCLIClient()
     elif provider_lower == "openai":
         return OpenAIClient(endpoint=endpoint or "https://api.openai.com/v1", api_key_env=api_key_env or "OPENAI_API_KEY", model_name=model)
     elif provider_lower == "deepseek":
