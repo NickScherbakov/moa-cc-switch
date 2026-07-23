@@ -118,38 +118,28 @@ class OpenAIDialect(HTTPDialect):
         return str(data)
 
 
-class CCSwitchClient(LLMClient):
-    """Client routing requests through CC Switch proxy or direct LLM APIs with HTTPX & Retry logic."""
+class BaseHTTPClient(LLMClient):
+    """Base class for HTTP-based LLM clients with retry logic and dialect parsing."""
 
     def __init__(
         self,
-        provider_name: str,
         endpoint: str,
         api_key_env: str,
-        model_name: str = "claude-3-5-sonnet-20241022",
-        dialect: Optional[HTTPDialect] = None,
+        model_name: str,
+        dialect: HTTPDialect,
         http_client: Optional[httpx.AsyncClient] = None,
     ):
-        self.provider_name = provider_name
         self.endpoint = endpoint.rstrip("/")
         self.api_key_env = api_key_env
         self.model_name = model_name
-        self._dialect = dialect or (AnthropicDialect() if "anthropic" in provider_name.lower() else OpenAIDialect())
+        self._dialect = dialect
         self._http_client = http_client
 
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         api_key = os.getenv(self.api_key_env, "")
-        
-        if api_key:
-            try:
-                return await self._http_generate(messages, temperature, api_key)
-            except Exception as e:
-                print(f"⚠️ HTTP request to {self.provider_name} failed: {e}. Falling back to CLI.", file=sys.stderr)
+        if not api_key:
+            return f"# Simulated response from {self.__class__.__name__} ({self.model_name})\npass\n"
 
-        return await self._fallback_via_cli(messages)
-
-    async def _http_generate(self, messages: List[Message], temperature: float, api_key: str) -> str:
-        """Asynchronous HTTP request execution with exponential backoff retries using Strategy pattern."""
         headers = self._dialect.get_headers(api_key)
         payload = self._dialect.get_payload(self.model_name, messages, temperature)
         url = self._dialect.get_url(self.endpoint)
@@ -172,6 +162,39 @@ class CCSwitchClient(LLMClient):
                 await client.aclose()
 
         raise RuntimeError("Failed to receive response from LLM API after retries.")
+
+
+class CCSwitchClient(BaseHTTPClient):
+    """Client routing requests through CC Switch proxy or direct LLM APIs with HTTPX & Retry logic."""
+
+    def __init__(
+        self,
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+        model_name: str = "claude-3-5-sonnet-20241022",
+        dialect: Optional[HTTPDialect] = None,
+        http_client: Optional[httpx.AsyncClient] = None,
+    ):
+        self.provider_name = provider_name
+        resolved_dialect = dialect or (AnthropicDialect() if "anthropic" in provider_name.lower() else OpenAIDialect())
+        super().__init__(
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+            model_name=model_name,
+            dialect=resolved_dialect,
+            http_client=http_client,
+        )
+
+    async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
+        api_key = os.getenv(self.api_key_env, "")
+        if api_key:
+            try:
+                return await super().generate(messages, temperature)
+            except Exception as e:
+                print(f"⚠️ HTTP request to {self.provider_name} failed: {e}. Falling back to CLI.", file=sys.stderr)
+
+        return await self._fallback_via_cli(messages)
 
     async def _fallback_via_cli(self, messages: List[Message]) -> str:
         """Execute real CLI fallback via cc-switch utility."""
@@ -197,7 +220,7 @@ class CCSwitchClient(LLMClient):
             return f"# CC Switch CLI fallback error: {e}\npass\n"
 
 
-class OpenAIClient(LLMClient):
+class OpenAIClient(BaseHTTPClient):
     """Direct provider driver for OpenAI models (GPT-4o, GPT-3.5, etc.)."""
 
     def __init__(
@@ -207,40 +230,16 @@ class OpenAIClient(LLMClient):
         model_name: str = "gpt-4o",
         http_client: Optional[httpx.AsyncClient] = None,
     ):
-        self.endpoint = endpoint.rstrip("/")
-        self.api_key_env = api_key_env
-        self.model_name = model_name
-        self._http_client = http_client
-
-    async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
-        api_key = os.getenv(self.api_key_env, "")
-        if not api_key:
-            return f"# Simulated response from OpenAIClient ({self.model_name})\npass\n"
-
-        url = f"{self.endpoint}/chat/completions" if not self.endpoint.endswith("/chat/completions") else self.endpoint
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        }
-        payload = {
-            "model": self.model_name,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
-        }
-
-        client = self._http_client or httpx.AsyncClient(timeout=config.timeout_seconds)
-        should_close = self._http_client is None
-        try:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        finally:
-            if should_close:
-                await client.aclose()
+        super().__init__(
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+            model_name=model_name,
+            dialect=OpenAIDialect(),
+            http_client=http_client,
+        )
 
 
-class DeepSeekClient(LLMClient):
+class DeepSeekClient(BaseHTTPClient):
     """Direct provider driver for DeepSeek API (DeepSeek-V3, DeepSeek-R1)."""
 
     def __init__(
@@ -250,37 +249,13 @@ class DeepSeekClient(LLMClient):
         model_name: str = "deepseek-coder",
         http_client: Optional[httpx.AsyncClient] = None,
     ):
-        self.endpoint = endpoint.rstrip("/")
-        self.api_key_env = api_key_env
-        self.model_name = model_name
-        self._http_client = http_client
-
-    async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
-        api_key = os.getenv(self.api_key_env, "")
-        if not api_key:
-            return f"# Simulated response from DeepSeekClient ({self.model_name})\npass\n"
-
-        url = f"{self.endpoint}/chat/completions" if not self.endpoint.endswith("/chat/completions") else self.endpoint
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        }
-        payload = {
-            "model": self.model_name,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
-        }
-
-        client = self._http_client or httpx.AsyncClient(timeout=config.timeout_seconds)
-        should_close = self._http_client is None
-        try:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        finally:
-            if should_close:
-                await client.aclose()
+        super().__init__(
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+            model_name=model_name,
+            dialect=OpenAIDialect(),
+            http_client=http_client,
+        )
 
 
 class OllamaClient(LLMClient):

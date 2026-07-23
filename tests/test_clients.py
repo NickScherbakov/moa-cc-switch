@@ -3,12 +3,35 @@ import respx
 import httpx
 from moa_engine.domain import Message
 from moa_engine.clients import (
+    AnthropicDialect,
+    BaseHTTPClient,
     CCSwitchClient,
-    OpenAIClient,
     DeepSeekClient,
     OllamaClient,
+    OpenAIDialect,
+    OpenAIClient,
     is_error_response,
 )
+
+
+@pytest.mark.asyncio
+async def test_base_http_client_driver(respx_mock):
+    respx_mock.post("https://api.anthropic.com/v1/messages").respond(
+        json={"content": [{"text": "anthropic output"}]}
+    )
+    client = BaseHTTPClient(
+        endpoint="https://api.anthropic.com",
+        api_key_env="TEST_KEY",
+        model_name="claude-3-5-sonnet-20241022",
+        dialect=AnthropicDialect(),
+    )
+
+    import os
+    os.environ["TEST_KEY"] = "sk-ant-fake"
+    res = await client.generate([Message(role="user", content="hi")])
+    assert res == "anthropic output"
+    del os.environ["TEST_KEY"]
+
 
 
 @pytest.mark.asyncio

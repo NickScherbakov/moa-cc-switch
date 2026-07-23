@@ -8,7 +8,9 @@ from rich.panel import Panel
 
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
 from moa_engine.clients import (
+    AnthropicDialect,
     AntigravityCLIClient,
+    BaseHTTPClient,
     CCSwitchClient,
     ClaudeCLIClient,
     CodexCLIClient,
@@ -17,6 +19,7 @@ from moa_engine.clients import (
     GeminiCLIClient,
     KiroCLIClient,
     OllamaClient,
+    OpenAIDialect,
     OpenAIClient,
 )
 from moa_engine.engine import MoAOrchestrator
@@ -47,7 +50,14 @@ def build_client_from_config(provider: str, model: str, endpoint: Optional[str] 
     elif provider_lower == "ollama":
         return OllamaClient(endpoint=endpoint or "http://localhost:11434", model_name=model)
     else:
-        return CCSwitchClient(provider_name=provider, endpoint=endpoint or "https://api.anthropic.com", api_key_env=api_key_env or "ANTHROPIC_API_KEY", model_name=model)
+        dialect = AnthropicDialect() if "anthropic" in provider_lower else OpenAIDialect()
+        return CCSwitchClient(
+            provider_name=provider,
+            endpoint=endpoint or "https://api.anthropic.com",
+            api_key_env=api_key_env or "ANTHROPIC_API_KEY",
+            model_name=model,
+            dialect=dialect,
+        )
 
 
 
