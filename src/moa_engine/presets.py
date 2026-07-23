@@ -13,6 +13,7 @@ class AgentConfig:
     temperature: float = 0.7
     endpoint: Optional[str] = None
     api_key_env: Optional[str] = None
+    system_prompt: Optional[str] = None
 
 
 @dataclass
@@ -21,6 +22,7 @@ class PresetConfig:
     description: str
     max_iterations: int = 50
     output_path: str = "result.py"
+    verify_cmd: Optional[str] = None
     proposers: List[AgentConfig] = field(default_factory=list)
     critic: Optional[AgentConfig] = None
     aggregator: Optional[AgentConfig] = None
@@ -47,6 +49,7 @@ class PresetConfig:
             description=data.get("description", ""),
             max_iterations=data.get("max_iterations", 50),
             output_path=data.get("output_path", "result.py"),
+            verify_cmd=data.get("verify_cmd"),
             proposers=proposers,
             critic=critic,
             aggregator=aggregator,

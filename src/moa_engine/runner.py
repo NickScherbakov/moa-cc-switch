@@ -61,8 +61,8 @@ def cli() -> None:
     args = parser.parse_args()
 
     task_desc = args.task or "Напиши кастомный LRU-кэш"
-    verify_cmd = args.verify or "pytest tests/test_lru_cache.py"
     output_path = args.out
+    preset = None
 
     if args.preset and os.path.exists(args.preset):
         if args.preset.endswith(".yaml") or args.preset.endswith(".yml"):
@@ -81,11 +81,29 @@ def cli() -> None:
         output_path = preset.output_path
         
         proposers = [
-            ProposerAgent(build_client_from_config(p.provider, p.model, p.endpoint, p.api_key_env), temperature=p.temperature)
+            ProposerAgent(
+                build_client_from_config(p.provider, p.model, p.endpoint, p.api_key_env),
+                temperature=p.temperature,
+                system_prompt=p.system_prompt,
+            )
             for p in preset.proposers
         ]
-        critic = CriticAgent(build_client_from_config(preset.critic.provider, preset.critic.model, preset.critic.endpoint, preset.critic.api_key_env)) if preset.critic else None
-        aggregator = AggregatorAgent(build_client_from_config(preset.aggregator.provider, preset.aggregator.model, preset.aggregator.endpoint, preset.aggregator.api_key_env)) if preset.aggregator else AggregatorAgent(CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"))
+        critic = (
+            CriticAgent(
+                build_client_from_config(preset.critic.provider, preset.critic.model, preset.critic.endpoint, preset.critic.api_key_env),
+                system_prompt=preset.critic.system_prompt,
+            )
+            if preset.critic
+            else None
+        )
+        aggregator = (
+            AggregatorAgent(
+                build_client_from_config(preset.aggregator.provider, preset.aggregator.model, preset.aggregator.endpoint, preset.aggregator.api_key_env),
+                system_prompt=preset.aggregator.system_prompt,
+            )
+            if preset.aggregator
+            else AggregatorAgent(CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"))
+        )
     else:
         console.print(
             Panel.fit(
@@ -106,7 +124,15 @@ def cli() -> None:
         critic = CriticAgent(claude_client)
         aggregator = AggregatorAgent(claude_client)
 
+    if args.verify:
+        verify_cmd = args.verify
+    elif preset and preset.verify_cmd:
+        verify_cmd = preset.verify_cmd
+    else:
+        verify_cmd = "pytest tests/test_lru_cache.py"
+
     verifier = CommandVerifier(verify_cmd)
+    max_iterations = preset.max_iterations if preset else 50
 
     orchestrator = MoAOrchestrator(
         proposers=proposers,
@@ -114,6 +140,7 @@ def cli() -> None:
         verifier=verifier,
         output_path=output_path,
         critic=critic,
+        max_iterations=max_iterations,
     )
 
     success = asyncio.run(orchestrator.run_until_proven(task_desc))

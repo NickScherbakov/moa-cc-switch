@@ -3,34 +3,39 @@
   "description": "Multi-agent website audit: 4 proposers (claude, agy, codex, gemini) + copilot critic + kiro aggregator",
   "max_iterations": 3,
   "output_path": "result.md",
+  "verify_cmd": "python -c \"content=open('result.md', encoding='utf-8').read(); assert len(content)>500 and 'infolimp' in content.lower(), 'Report incomplete'; print('OK')\"",
   "proposers": [
     {
       "name": "claude-proposer",
       "role": "proposer",
       "provider": "claude-cli",
       "model": "default",
-      "temperature": 0.5
+      "temperature": 0.5,
+      "system_prompt": "Ты — эксперт-аналитик веб-сайтов. Твоя задача — провести исследование указанного сайта и написать структурированный аналитический отчёт на русском языке. Используй все доступные тебе инструменты для загрузки и анализа страниц сайта."
     },
     {
       "name": "agy-proposer",
       "role": "proposer",
       "provider": "antigravity",
       "model": "default",
-      "temperature": 0.6
+      "temperature": 0.6,
+      "system_prompt": "Ты — эксперт-аналитик веб-сайтов. Твоя задача — провести исследование указанного сайта и написать структурированный аналитический отчёт на русском языке. Используй все доступные тебе инструменты для загрузки и анализа страниц сайта."
     },
     {
       "name": "codex-proposer",
       "role": "proposer",
       "provider": "codex-cli",
       "model": "default",
-      "temperature": 0.4
+      "temperature": 0.4,
+      "system_prompt": "Ты — эксперт-аналитик веб-сайтов. Твоя задача — провести исследование указанного сайта и написать структурированный аналитический отчёт на русском языке. Используй все доступные тебе инструменты для загрузки и анализа страниц сайта."
     },
     {
       "name": "gemini-proposer",
       "role": "proposer",
       "provider": "gemini-cli",
       "model": "default",
-      "temperature": 0.5
+      "temperature": 0.5,
+      "system_prompt": "Ты — эксперт-аналитик веб-сайтов. Твоя задача — провести исследование указанного сайта и написать структурированный аналитический отчёт на русском языке. Используй все доступные тебе инструменты для загрузки и анализа страниц сайта."
     }
   ],
   "critic": {
@@ -38,13 +43,15 @@
     "role": "critic",
     "provider": "copilot-cli",
     "model": "default",
-    "temperature": 0.3
+    "temperature": 0.3,
+    "system_prompt": "Ты — строгий редактор и фактчекер. Проанализируй предложенные варианты аналитического отчёта. Укажи: какие факты требуют проверки, где есть противоречия, что пропущено, что является домыслом без источника. Будь конкретен и критичен."
   },
   "aggregator": {
     "name": "kiro-aggregator",
     "role": "aggregator",
     "provider": "kiro-cli",
     "model": "default",
-    "temperature": 0.4
+    "temperature": 0.4,
+    "system_prompt": "Ты — главный аналитик и редактор. Твоя задача — объединить лучшее из предложенных вариантов отчётов в один исчерпывающий, точный и хорошо структурированный аналитический отчёт на русском языке в формате Markdown. Учти все замечания критика. Не выдумывай факты — основывайся только на том, что реально содержится в вариантах. Если агенты не смогли загрузить сайт — честно об этом напиши."
   }
 }
