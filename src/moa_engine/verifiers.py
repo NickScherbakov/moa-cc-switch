@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 from abc import ABC, abstractmethod
 from typing import List
@@ -24,9 +25,9 @@ class CommandVerifier(VerifierStrategy):
     def verify(self, artifact: Artifact) -> VerificationResult:
         artifact.save()
         try:
+            cmd_args = shlex.split(self._command)
             res = subprocess.run(
-                self._command,
-                shell=True,
+                cmd_args,
                 capture_output=True,
                 text=True,
                 timeout=self._timeout,

@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import os
 import sys
+import httpx
 from typing import List, Optional
 from rich.console import Console
 from rich.panel import Panel
@@ -22,6 +23,7 @@ from moa_engine.clients import (
     OpenAIDialect,
     OpenAIClient,
 )
+from moa_engine.config import config
 from moa_engine.engine import MoAOrchestrator
 from moa_engine.presets import PresetConfig
 from moa_engine.verifiers import CommandVerifier, CompositeVerifier
@@ -60,7 +62,6 @@ def build_client_from_config(provider: str, model: str, endpoint: Optional[str] 
         )
 
 
-
 def cli() -> None:
     """CLI entry point for running the MoA Engine with Rich UI & Preset support."""
     parser = argparse.ArgumentParser(description="Autonomous MoA Engine")
@@ -68,9 +69,24 @@ def cli() -> None:
     parser.add_argument("--verify", help="Команда верификации")
     parser.add_argument("--out", default="result.py", help="Файл для сохранения")
     parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")
+    parser.add_argument("--context-url", help="URL to fetch and append to the task description")
     args = parser.parse_args()
 
     task_desc = args.task or "Напиши кастомный LRU-кэш"
+
+    if args.context_url:
+        console.print(f"[cyan]🌐 Скачивание контекста с {args.context_url}...[/cyan]")
+        try:
+            with httpx.Client(follow_redirects=True, timeout=config.timeout_seconds) as client:
+                resp = client.get(args.context_url)
+                resp.raise_for_status()
+                site_content = resp.text[:15000]
+                task_desc += f"\n\n--- Website Context ({args.context_url}) ---\n{site_content}"
+                console.print(f"[green]✅ Успешно загружен веб-контекст ({len(site_content)} символов)[/green]")
+        except Exception as e:
+            console.print(f"[bold red]❌ Ошибка при скачивании веб-контекста {args.context_url}: {e}[/bold red]")
+            sys.exit(1)
+
     output_path = args.out
     preset = None
 

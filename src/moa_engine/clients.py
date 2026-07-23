@@ -206,11 +206,13 @@ class CCSwitchClient(BaseHTTPClient):
                 self.provider_name,
                 "--model",
                 self.model_name,
-                prompt_text,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60.0)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input=prompt_text.encode("utf-8")), timeout=60.0
+            )
             if process.returncode == 0:
                 return stdout.decode("utf-8", errors="ignore").strip()
 
@@ -330,7 +332,7 @@ class ClaudeCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["claude", "--print", prompt_text], timeout=45.0)
+            res = await self._exec_subprocess(["claude", "--print"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
             if res:
                 return res
         except Exception as e:
@@ -344,7 +346,7 @@ class CopilotCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["copilot", "-p", prompt_text, "--silent", "--yolo"], timeout=45.0)
+            res = await self._exec_subprocess(["copilot", "--silent", "--yolo"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
             if res:
                 return res
         except Exception as e:
@@ -358,7 +360,7 @@ class CodexCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["codex", "exec", prompt_text], input_data=b"\n", timeout=45.0)
+            res = await self._exec_subprocess(["codex", "exec"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
             if res:
                 return res
         except Exception as e:
@@ -373,12 +375,12 @@ class GeminiCLIClient(BaseCLIClient):
         prompt_text = self.format_prompt(messages)
         try:
             process = await asyncio.create_subprocess_exec(
-                "gemini", "-p", prompt_text,
+                "gemini",
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(input=b"\n"), timeout=45.0)
+            stdout, stderr = await asyncio.wait_for(process.communicate(input=prompt_text.encode("utf-8")), timeout=45.0)
             err_output = stderr.decode("utf-8", errors="ignore").strip() + "\n" + stdout.decode("utf-8", errors="ignore").strip()
             
             if process.returncode != 0 or "Error authenticating" in err_output or "Cloud Code Private API" in err_output:
@@ -403,7 +405,7 @@ class AntigravityCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["agy", "-p", prompt_text, "--dangerously-skip-permissions"], timeout=45.0)
+            res = await self._exec_subprocess(["agy", "--dangerously-skip-permissions"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
             if res:
                 return res
         except Exception as e:
@@ -417,17 +419,17 @@ class KiroCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
 
-        # Attempt 1: kiro --print "<prompt>"
+        # Attempt 1: kiro --print via stdin
         try:
-            res = await self._exec_subprocess(["kiro", "--print", prompt_text], timeout=45.0)
+            res = await self._exec_subprocess(["kiro", "--print"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
             if res:
                 return res
         except Exception:
             pass
 
-        # Attempt 2: kiro -p "<prompt>"
+        # Attempt 2: kiro -p via stdin
         try:
-            res = await self._exec_subprocess(["kiro", "-p", prompt_text], timeout=45.0)
+            res = await self._exec_subprocess(["kiro", "-p"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
             if res:
                 return res
         except Exception:
