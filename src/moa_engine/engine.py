@@ -3,6 +3,7 @@ import sys
 from typing import List, Optional
 
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
+from moa_engine.clients import is_error_response
 from moa_engine.domain import Artifact, Task
 from moa_engine.reporter import ExecutionReporter
 from moa_engine.verifiers import VerifierStrategy
@@ -45,24 +46,35 @@ class MoAOrchestrator:
             
             proposals: List[str] = []
             for p in proposals_raw:
-                if isinstance(p, str) and p.strip():
+                if isinstance(p, str) and p.strip() and not is_error_response(p):
                     proposals.append(p)
+                elif isinstance(p, str) and is_error_response(p):
+                    first_err_line = p.strip().splitlines()[0] if p.strip() else p
+                    print(f"⚠️ Proposer agent error response filtered out: {first_err_line}", file=sys.stderr)
                 elif isinstance(p, Exception):
                     print(f"⚠️ Proposer agent raised exception: {p}", file=sys.stderr)
 
             if not proposals:
-                print("⚠️ Ни один агент не вернул результат. Ожидание...")
+                print("⚠️ Ни один агент не вернул валидный результат. Ожидание...", file=sys.stderr)
                 await asyncio.sleep(1)
                 continue
 
             critique = ""
             if self._critic:
                 try:
-                    critique = await self._critic.process(task)
+                    crit_res = await self._critic.process(task)
+                    if isinstance(crit_res, str) and not is_error_response(crit_res):
+                        critique = crit_res
+                    else:
+                        print("⚠️ Critic agent returned error, skipping critique.", file=sys.stderr)
                 except Exception as e:
                     print(f"⚠️ Critic agent raised exception: {e}", file=sys.stderr)
 
             code = await self._aggregator.process_proposals(task, proposals, critique=critique)
+            if is_error_response(code):
+                print("⚠️ Aggregator returned error, falling back to longest valid proposal.", file=sys.stderr)
+                code = max(proposals, key=len)
+
             artifact = Artifact(path=self._output_path, content=code)
 
             result = self._verifier.verify(artifact)

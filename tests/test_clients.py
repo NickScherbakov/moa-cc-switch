@@ -2,7 +2,13 @@ import pytest
 import respx
 import httpx
 from moa_engine.domain import Message
-from moa_engine.clients import CCSwitchClient, OpenAIClient, DeepSeekClient, OllamaClient
+from moa_engine.clients import (
+    CCSwitchClient,
+    OpenAIClient,
+    DeepSeekClient,
+    OllamaClient,
+    is_error_response,
+)
 
 
 @pytest.mark.asyncio
@@ -52,3 +58,12 @@ async def test_claude_cli_real_fallback():
     res = await client.generate([Message(role="user", content="Respond with string OK_REAL_TEST")])
     assert isinstance(res, str)
     assert len(res) > 0
+
+
+def test_is_error_response_helper():
+    assert is_error_response("# Claude CLI error: failed\npass\n") is True
+    assert is_error_response("# Gemini CLI Unavailable (Auth/API Error)\npass\n") is True
+    assert is_error_response("# Local Ollama endpoint unreachable (http://loc): err\npass\n") is True
+    assert is_error_response("class LRUCache:\n    pass") is False
+    assert is_error_response("") is True
+
