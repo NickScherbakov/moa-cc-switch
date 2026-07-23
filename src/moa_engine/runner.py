@@ -3,6 +3,7 @@ import asyncio
 import os
 import sys
 import httpx
+from bs4 import BeautifulSoup
 from typing import List, Optional
 from rich.console import Console
 from rich.panel import Panel
@@ -62,6 +63,27 @@ def build_client_from_config(provider: str, model: str, endpoint: Optional[str] 
         )
 
 
+async def fetch_urls_context(urls: List[str]) -> str:
+    """Fetch HTML from multiple URLs asynchronously, clean invisible elements, extract text, and return concatenated context."""
+    context_parts = []
+    async with httpx.AsyncClient(follow_redirects=True, timeout=config.timeout_seconds) as client:
+        for url in urls:
+            console.print(f"[cyan]🌐 Скачивание контекста с {url}...[/cyan]")
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for tag in soup(["script", "style", "noscript", "meta", "head"]):
+                    tag.decompose()
+                clean_text = soup.get_text(separator="\n", strip=True)[:15000]
+                context_parts.append(f"\n\n--- Website Context ({url}) ---\n{clean_text}")
+                console.print(f"[green]✅ Успешно загружен очищенный контекст {url} ({len(clean_text)} символов)[/green]")
+            except Exception as e:
+                console.print(f"[bold red]❌ Ошибка при скачивании веб-контекста {url}: {e}[/bold red]")
+                sys.exit(1)
+    return "".join(context_parts)
+
+
 def cli() -> None:
     """CLI entry point for running the MoA Engine with Rich UI & Preset support."""
     parser = argparse.ArgumentParser(description="Autonomous MoA Engine")
@@ -69,23 +91,13 @@ def cli() -> None:
     parser.add_argument("--verify", help="Команда верификации")
     parser.add_argument("--out", default="result.py", help="Файл для сохранения")
     parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")
-    parser.add_argument("--context-url", help="URL to fetch and append to the task description")
+    parser.add_argument("--context-url", nargs="+", help="URL(s) to fetch and append to the task description")
     args = parser.parse_args()
 
     task_desc = args.task or "Напиши кастомный LRU-кэш"
 
     if args.context_url:
-        console.print(f"[cyan]🌐 Скачивание контекста с {args.context_url}...[/cyan]")
-        try:
-            with httpx.Client(follow_redirects=True, timeout=config.timeout_seconds) as client:
-                resp = client.get(args.context_url)
-                resp.raise_for_status()
-                site_content = resp.text[:15000]
-                task_desc += f"\n\n--- Website Context ({args.context_url}) ---\n{site_content}"
-                console.print(f"[green]✅ Успешно загружен веб-контекст ({len(site_content)} символов)[/green]")
-        except Exception as e:
-            console.print(f"[bold red]❌ Ошибка при скачивании веб-контекста {args.context_url}: {e}[/bold red]")
-            sys.exit(1)
+        task_desc += asyncio.run(fetch_urls_context(args.context_url))
 
     output_path = args.out
     preset = None
