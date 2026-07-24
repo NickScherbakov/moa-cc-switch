@@ -5,63 +5,39 @@
 [![Architecture: Clean/OOP](https://img.shields.io/badge/architecture-Clean%2FOOP-green.svg)](#-архитектурные-принципы-solid)
 [![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-Автономный фреймворк оркестрации **Mixture-of-Agents (MoA)**, построенный на принципах чистого ООП и SOLID. Проект объединяет сильные стороны разных моделей LLM (Anthropic Claude, OpenAI GPT, DeepSeek, Ollama) в единый синергический коллектив с автоматической маршрутизацией через **CC Switch** и **доказуемой (детерминированной) верификацией** результатов.
+Автономный фреймворк оркестрации **Mixture-of-Agents (MoA)**, построенный на принципах чистого ООП и SOLID. Проект объединяет сильные стороны различных провайдеров LLM (Anthropic Claude, OpenAI GPT, DeepSeek, Ollama, Kiro, Copilot, Codex, Gemini, Antigravity) в единый синергический коллектив с автоматической маршрутизацией через **CC Switch**, мульти-контекстным веб-скрейпингом и **доказуемой (детерминированной) верификацией** результатов.
+
+---
+
+## 🔑 Ключевые возможности
+
+- **Стратегия HTTP-транспорта (`HTTPDialect`)**: Гибкое разделение провайдерных протоколов (`AnthropicDialect`, `OpenAIDialect`) и повторное использование сессий HTTPX.
+- **Иерархия базовых клиентов (`BaseHTTPClient`, `BaseCLIClient`)**: Полное устранение дублирования кода, поддержка эквивалентного интерфейса для API и CLI агентов.
+- **Защита от уязвимостей и инъекций**:
+  - Устранена проблема `ARG_MAX`: промпты в CLI-агентах передаются строго через `stdin` (`input_data`), без ограничений на длину командной строки.
+  - Устранена уязвимость Shell Injection: подпроцессы запускаются через `create_subprocess_exec` без `shell=True`.
+  - Безопасная верификация артефактов: `CommandVerifier` использует `shlex.split` вместо `shell=True`.
+- **Инъекция системных промптов (`system_prompt`)**: Каждому агенту в коллективе можно передать специализированный промпт (например, Программист, Критик, Архитектор, Безопасник).
+- **Мульти-контекстный веб-аудит (`--context-url`)**: Асинхронное скачивание нескольких сайтов с авто-очисткой от HTML-мусора (`script`, `style`, `noscript`, `meta`, `head`) через `BeautifulSoup4`.
+- **Защита от фильтрации ошибок (`is_error_response`)**: Ошибки CLI или недоступность провайдеров отсеиваются до этапа агрегации, предотвращая сбои пайплайна.
+- **Декларативная система пресетов**: Поддержка JSON/YAML конфигураций (`presets/infolimp-audit.json`), связывающих роли, промпты и команды верификации.
 
 ---
 
 ## 🤖 Поддерживаемые провайдеры
 
-| Ключ провайдера | Клиент | Способ вызова |
-|---|---|---|
-| `anthropic`, `ccswitch` | `CCSwitchClient` | HTTP + fallback CLI |
-| `openai` | `OpenAIClient` | HTTP |
-| `deepseek` | `DeepSeekClient` | HTTP |
-| `ollama` | `OllamaClient` | HTTP (localhost) |
-| `claude`, `claude-cli` | `ClaudeCLIClient` | `claude --print` |
-| `copilot`, `copilot-cli` | `CopilotCLIClient` | `copilot -p ... --yolo` |
-| `codex`, `codex-cli` | `CodexCLIClient` | `codex exec` |
-| `gemini`, `gemini-cli` | `GeminiCLIClient` | `gemini -p` |
-| `antigravity`, `agy` | `AntigravityCLIClient` | `agy -p ... --dangerously-skip-permissions` |
-| **`kiro`, `kiro-cli`** | **`KiroCLIClient`** | **`kiro --print` / `-p` / stdin** |
-
----
-
-## 🆕 Kiro CLI Integration
-
-В состав провайдеров добавлен **`KiroCLIClient`** — интеграция с локально установленным [Kiro CLI](https://kiro.dev).
-
-Клиент реализует трёхшаговую fallback-стратегию:
-
-```
-kiro --print "<prompt>"   →   kiro -p "<prompt>"   →   kiro (stdin pipe)
-```
-
-- Таймаут каждого шага — 45 секунд (`asyncio.wait_for`)
-- При недоступности бинарника или ошибке возвращает строку `"# Kiro CLI error: ..."` — пайплайн не падает
-- Диагностика пишется в `sys.stderr`, не засоряя stdout
-- Новых зависимостей не добавляется — используются только `asyncio`, `subprocess`, `sys`
-
-### Использование в пресете
-
-```json
-{
-  "proposers": [
-    { "provider": "kiro", "model": "default" },
-    { "provider": "claude", "model": "default" }
-  ],
-  "aggregator": { "provider": "kiro-cli", "model": "default" }
-}
-```
-
-### Использование в коде
-
-```python
-from moa_engine.clients import KiroCLIClient
-from moa_engine.domain import Message
-
-client = KiroCLIClient()
-response = await client.generate([Message(role="user", content="Write a Python function")])
-```
+| Ключ провайдера | Клиент | Базовый класс | Способ вызова |
+|---|---|---|---|
+| `anthropic`, `ccswitch` | `CCSwitchClient` | `BaseHTTPClient` | HTTP (Strategy API) + CLI fallback (`cc-switch`) |
+| `openai` | `OpenAIClient` | `BaseHTTPClient` | HTTP (`OpenAIDialect`) |
+| `deepseek` | `DeepSeekClient` | `BaseHTTPClient` | HTTP (`OpenAIDialect`) |
+| `ollama` | `OllamaClient` | `LLMClient` | HTTP REST (localhost:11434) |
+| `claude`, `claude-cli` | `ClaudeCLIClient` | `BaseCLIClient` | `claude --print` via stdin |
+| `copilot`, `copilot-cli` | `CopilotCLIClient` | `BaseCLIClient` | `copilot --silent --yolo` via stdin |
+| `codex`, `codex-cli` | `CodexCLIClient` | `BaseCLIClient` | `codex exec` via stdin |
+| `gemini`, `gemini-cli` | `GeminiCLIClient` | `BaseCLIClient` | `gemini` via stdin |
+| `antigravity`, `agy` | `AntigravityCLIClient` | `BaseCLIClient` | `agy --dangerously-skip-permissions` via stdin |
+| `kiro`, `kiro-cli` | `KiroCLIClient` | `BaseCLIClient` | `kiro --print` / `-p` / stdin |
 
 ---
 
@@ -91,24 +67,67 @@ classDiagram
         <<abstract>>
         +generate(messages: List~Message~, temperature: float)* str
     }
+
+    class HTTPDialect {
+        <<abstract>>
+        +get_url(endpoint: str)* str
+        +get_headers(api_key: str)* Dict
+        +get_payload(model_name: str, messages: List~Message~, temperature: float)* Dict
+        +parse_response(data: Dict)* str
+    }
+    class AnthropicDialect {
+        +get_url(...) str
+    }
+    class OpenAIDialect {
+        +get_url(...) str
+    }
+    HTTPDialect <|.. AnthropicDialect
+    HTTPDialect <|.. OpenAIDialect
+
+    class BaseHTTPClient {
+        #str endpoint
+        #str api_key_env
+        #str model_name
+        #HTTPDialect _dialect
+        +generate(messages: List~Message~, temperature: float) str
+    }
+    LLMClient <|.. BaseHTTPClient
+    BaseHTTPClient o-- HTTPDialect
+
     class CCSwitchClient {
         +str provider_name
-        +str endpoint
-        +str api_key_env
-        +str model_name
         +generate(messages: List~Message~, temperature: float) str
-        -_http_generate(...) str
         -_fallback_via_cli(messages: List~Message~) str
     }
-    class KiroCLIClient {
-        +generate(messages: List~Message~, temperature: float) str
+    class OpenAIClient
+    class DeepSeekClient
+    BaseHTTPClient <|-- CCSwitchClient
+    BaseHTTPClient <|-- OpenAIClient
+    BaseHTTPClient <|-- DeepSeekClient
+
+    class BaseCLIClient {
+        +format_prompt(messages: List~Message~) str
+        #_exec_subprocess(cmd: List~str~, input_data: bytes, timeout: float) str
     }
-    LLMClient <|.. CCSwitchClient
-    LLMClient <|.. KiroCLIClient
+    LLMClient <|.. BaseCLIClient
+
+    class ClaudeCLIClient
+    class CopilotCLIClient
+    class CodexCLIClient
+    class GeminiCLIClient
+    class AntigravityCLIClient
+    class KiroCLIClient
+    BaseCLIClient <|-- ClaudeCLIClient
+    BaseCLIClient <|-- CopilotCLIClient
+    BaseCLIClient <|-- CodexCLIClient
+    BaseCLIClient <|-- GeminiCLIClient
+    BaseCLIClient <|-- AntigravityCLIClient
+    BaseCLIClient <|-- KiroCLIClient
 
     class Agent {
         <<abstract>>
         #LLMClient _client
+        #str system_prompt
         +process(task: Task)* str
     }
     class ProposerAgent {
@@ -144,12 +163,6 @@ classDiagram
     VerifierStrategy <|.. CompositeVerifier
     CompositeVerifier o-- VerifierStrategy
 
-    class ExecutionReporter {
-        +List~IterationLog~ logs
-        +log_iteration(...) void
-        +generate_html_report(output_file: str) str
-    }
-
     class MoAOrchestrator {
         -List~ProposerAgent~ _proposers
         -AggregatorAgent _aggregator
@@ -171,11 +184,17 @@ classDiagram
 
 ## 🏛 Архитектурные принципы (SOLID)
 
-- **Single Responsibility (SRP)**: `CCSwitchClient` отвечает за HTTP-транспорт и ретраи, `Agent` — за роли и промпты, `VerifierStrategy` — за проверку артефактов, `ExecutionReporter` — за HTML-отчёты, `MoAOrchestrator` — за основной цикл.
-- **Open/Closed (OCP)**: Добавление новых способов верификации (`CompositeVerifier`) или провайдеров происходит через реализацию абстрактных классов без модификации оркестратора.
-- **Liskov Substitution (LSP)**: Любая реализация `LLMClient` или `VerifierStrategy` полностью взаимозаменяема.
-- **Interface Segregation (ISP)**: Разделение узких дата-классов `Message`, `Task`, `Artifact`, `VerificationResult`.
-- **Dependency Inversion (DIP)**: `MoAOrchestrator` зависит строго от интерфейсов `LLMClient`, `Agent` и `VerifierStrategy`.
+- **Single Responsibility (SRP)**:
+  - `HTTPDialect` отвечает за специфику протокола API (заголовки, формат JSON).
+  - `BaseHTTPClient` отвечает за HTTP-транспорт и ретраи.
+  - `BaseCLIClient` отвечает за безопасный вызов процессов через `stdin`.
+  - `Agent` отвечает за роли и инъекцию `system_prompt`.
+  - `VerifierStrategy` отвечает за детерминированную проверку результатов.
+  - `MoAOrchestrator` отвечает за цикл оркестрации и фильтрацию ошибок.
+- **Open/Closed (OCP)**: Добавление новых диалектов (`HTTPDialect`), моделей верификации или провайдеров происходит без изменения логики оркестратора.
+- **Liskov Substitution (LSP)**: Любая реализация `LLMClient` (HTTP или CLI) или `VerifierStrategy` полностью взаимозаменяема.
+- **Interface Segregation (ISP)**: Чёткое разделение моделей данных (`Message`, `Task`, `Artifact`, `VerificationResult`).
+- **Dependency Inversion (DIP)**: `MoAOrchestrator` и `Agent` зависят от абстракций `LLMClient` и `VerifierStrategy`, а не от конкретных клиентов.
 
 ---
 
@@ -191,7 +210,7 @@ pip install -e .[dev]
 ```
 
 ### 2. Конфигурация (.env)
-Создайте файл `.env` в корне проекта (опционально для реальных запросов к API):
+Создайте файл `.env` в корне проекта (опционально):
 ```env
 ANTHROPIC_API_KEY=your_anthropic_key
 OPENAI_API_KEY=your_openai_key
@@ -202,18 +221,20 @@ MOA_MAX_RETRIES=3
 ```
 
 ### 3. Запуск через CLI (`moa-run`)
+
+#### Простая задача с верификацией:
 ```bash
 moa-run --task "Напиши кастомный LRU-кэш" --verify "pytest tests/test_lru_cache.py" --out "lru_cache.py"
+```
+
+#### Запуск аудита по пресету с мульти-контекстным скрейпингом:
+```bash
+moa-run --preset presets/infolimp-audit.json --context-url https://infolimp.ru https://nopikreport.com https://nopikreport.store
 ```
 
 ### 4. Запуск тестов
 ```bash
 pytest
-```
-
-### 5. Тесты CLI-агентов (включая Kiro)
-```bash
-pytest tests/test_cli_agents.py -v
 ```
 
 ---
@@ -222,5 +243,5 @@ pytest tests/test_cli_agents.py -v
 
 | Роль | Участник | Вклад |
 |---|---|---|
-| Автор проекта | [NickScherbakov](https://github.com/NickScherbakov) | Архитектура MoA Engine, CC Switch, HTTP-транспорт, CLI-агенты, верификация |
-| Соавтор | [Kiro](https://kiro.dev) (AI-ассистент) | Спецификация и реализация `KiroCLIClient`, обновление документации, spec-driven разработка интеграции |
+| Автор проекта | [NickScherbakov](https://github.com/NickScherbakov) | Архитектура MoA Engine, CC Switch, HTTP-транспорт, CLI-агенты, верификация, мульти-контекст |
+| Соавтор | [Kiro](https://kiro.dev) (AI-ассистент) | Спецификация и реализация `KiroCLIClient`, рефакторинг `BaseHTTPClient` / `BaseCLIClient`, ревизия документации |
