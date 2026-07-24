@@ -9,7 +9,7 @@ def test_preset_config_json_roundtrip(tmp_path):
         description="Test Preset Description",
         max_iterations=10,
         output_path="out.py",
-        verify_cmd="python test.py",
+        verifier_config={"type": "command", "command": "python test.py"},
         proposers=[
             AgentConfig(name="prop1", role="proposer", provider="openai", model="gpt-4o", system_prompt="Prompt 1"),
             AgentConfig(name="prop2", role="proposer", provider="anthropic", model="claude-3-5-sonnet"),
@@ -23,6 +23,7 @@ def test_preset_config_json_roundtrip(tmp_path):
 
     loaded = PresetConfig.from_json(str(json_file))
     assert loaded.preset_name == "test_preset"
+    assert loaded.verifier_config == {"type": "command", "command": "python test.py"}
     assert loaded.verify_cmd == "python test.py"
     assert len(loaded.proposers) == 2
     assert loaded.proposers[0].provider == "openai"
@@ -49,11 +50,13 @@ def test_preset_config_yaml_roundtrip(tmp_path):
 def test_infolimp_audit_preset_loading():
     preset = PresetConfig.from_json("presets/infolimp-audit.json")
     assert preset.preset_name == "infolimp-audit"
-    assert preset.verify_cmd is not None
-    assert "result.md" in preset.verify_cmd
+    assert preset.verifier_config is not None
+    assert preset.verifier_config["type"] == "llm"
+    assert "8 пунктов" in preset.verifier_config["evaluation_prompt"]
     assert len(preset.proposers) == 4
     for p in preset.proposers:
         assert p.system_prompt is not None
     assert preset.critic.system_prompt is not None
     assert preset.aggregator.system_prompt is not None
+
 

@@ -3,7 +3,10 @@
   "description": "Multi-agent website audit: 4 proposers (claude, agy, codex, gemini) + copilot critic + kiro aggregator",
   "max_iterations": 3,
   "output_path": "result.md",
-  "verify_cmd": "python -c \"content=open('result.md', encoding='utf-8').read(); assert len(content)>500 and 'infolimp' in content.lower(), 'Report incomplete'; print('OK')\"",
+  "verifier_config": {
+    "type": "llm",
+    "evaluation_prompt": "Проанализируй отчет. Убедись, что аудит охватывает все переданные сайты, содержит 8 пунктов задания, написан в Markdown и не имеет заглушек/плейсхолдеров."
+  },
   "proposers": [
     {
       "name": "claude-proposer",

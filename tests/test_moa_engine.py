@@ -84,3 +84,18 @@ async def test_orchestrator_flow(respx_mock, monkeypatch):
     if os.path.exists("test_output.py"):
         os.remove("test_output.py")
 
+
+@pytest.mark.asyncio
+async def test_fetch_urls_context_gather(respx_mock):
+    from moa_engine.runner import fetch_urls_context
+
+    respx_mock.get("http://example1.com").respond(text="<html><body><h1>Site 1</h1></body></html>")
+    respx_mock.get("http://example2.com").respond(text="<html><body><h1>Site 2</h1></body></html>")
+
+    context = await fetch_urls_context(["http://example1.com", "http://example2.com"])
+    assert "Site 1" in context
+    assert "Site 2" in context
+    assert "Website Context (http://example1.com)" in context
+    assert "Website Context (http://example2.com)" in context
+
+

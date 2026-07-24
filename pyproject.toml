@@ -24,3 +24,6 @@ dev = [
 
 [project.scripts]
 moa-run = "moa_engine.runner:cli"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

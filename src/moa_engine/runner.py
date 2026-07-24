@@ -27,7 +27,7 @@ from moa_engine.clients import (
 from moa_engine.config import config
 from moa_engine.engine import MoAOrchestrator
 from moa_engine.presets import PresetConfig
-from moa_engine.verifiers import CommandVerifier, CompositeVerifier
+from moa_engine.verifiers import CommandVerifier, CompositeVerifier, LLMVerifier
 
 console = Console()
 
@@ -73,41 +73,41 @@ def build_client_from_config(provider: str, model: str, endpoint: Optional[str] 
         )
 
 
+def parse_html_to_text(html: str) -> str:
+    """Parse raw HTML, strip invisible tags, and return clean plain text (sync, safe for threading)."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript", "meta", "head"]):
+        tag.decompose()
+    return soup.get_text(separator="\n", strip=True)[:15000]
+
+
+async def _fetch_single_url(client: httpx.AsyncClient, url: str) -> str:
+    console.print(f"[cyan]🌐 Скачивание контекста с {url}...[/cyan]")
+    try:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        clean_text = await asyncio.to_thread(parse_html_to_text, resp.text)
+        console.print(f"[green]✅ Успешно загружен очищенный контекст {url} ({len(clean_text)} символов)[/green]")
+        return f"\n\n--- Website Context ({url}) ---\n{clean_text}"
+    except Exception as e:
+        console.print(f"[bold red]❌ Ошибка при скачивании веб-контекста {url}: {e}[/bold red]")
+        sys.exit(1)
+
+
 async def fetch_urls_context(urls: List[str]) -> str:
-    """Fetch HTML from multiple URLs asynchronously, clean invisible elements, extract text, and return concatenated context."""
-    context_parts = []
+    """Fetch HTML from multiple URLs asynchronously using asyncio.gather, clean invisible elements, extract text, and return concatenated context."""
     async with httpx.AsyncClient(follow_redirects=True, timeout=config.timeout_seconds) as client:
-        for url in urls:
-            console.print(f"[cyan]🌐 Скачивание контекста с {url}...[/cyan]")
-            try:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                soup = BeautifulSoup(resp.text, "html.parser")
-                for tag in soup(["script", "style", "noscript", "meta", "head"]):
-                    tag.decompose()
-                clean_text = soup.get_text(separator="\n", strip=True)[:15000]
-                context_parts.append(f"\n\n--- Website Context ({url}) ---\n{clean_text}")
-                console.print(f"[green]✅ Успешно загружен очищенный контекст {url} ({len(clean_text)} символов)[/green]")
-            except Exception as e:
-                console.print(f"[bold red]❌ Ошибка при скачивании веб-контекста {url}: {e}[/bold red]")
-                sys.exit(1)
-    return "".join(context_parts)
+        tasks = [_fetch_single_url(client, url) for url in urls]
+        results = await asyncio.gather(*tasks)
+    return "".join(results)
 
 
-def cli() -> None:
-    """CLI entry point for running the MoA Engine with Rich UI & Preset support."""
-    parser = argparse.ArgumentParser(description="Autonomous MoA Engine")
-    parser.add_argument("--task", help="Описание задачи")
-    parser.add_argument("--verify", help="Команда верификации")
-    parser.add_argument("--out", default="result.py", help="Файл для сохранения")
-    parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")
-    parser.add_argument("--context-url", nargs="+", help="URL(s) to fetch and append to the task description")
-    args = parser.parse_args()
-
+async def main(args: argparse.Namespace) -> None:
+    """Async main function for MoA Engine execution."""
     task_desc = args.task or "Напиши кастомный LRU-кэш"
 
     if args.context_url:
-        task_desc += asyncio.run(fetch_urls_context(args.context_url))
+        task_desc += await fetch_urls_context(args.context_url)
 
     output_path = args.out
     preset = None
@@ -173,13 +173,31 @@ def cli() -> None:
         aggregator = AggregatorAgent(claude_client)
 
     if args.verify:
-        verify_cmd = args.verify
-    elif preset and preset.verify_cmd:
-        verify_cmd = preset.verify_cmd
+        verifier = CommandVerifier(args.verify)
+    elif preset and preset.verifier_config:
+        vc = preset.verifier_config
+        if isinstance(vc, dict) and vc.get("type") == "llm":
+            if "provider" in vc:
+                verifier_client = build_client_from_config(
+                    provider=vc["provider"],
+                    model=vc.get("model", "gpt-4o-mini"),
+                    endpoint=vc.get("endpoint"),
+                    api_key_env=vc.get("api_key_env"),
+                )
+            else:
+                verifier_client = OpenAIClient(model_name=vc.get("model", "gpt-4o-mini"))
+            eval_prompt = vc.get("evaluation_prompt", "")
+            verifier = LLMVerifier(client=verifier_client, evaluation_prompt=eval_prompt)
+        elif isinstance(vc, dict) and vc.get("type") == "command":
+            cmd = vc.get("command") or vc.get("verify_cmd") or "pytest tests/test_lru_cache.py"
+            verifier = CommandVerifier(cmd)
+        elif isinstance(vc, str):
+            verifier = CommandVerifier(vc)
+        else:
+            verifier = CommandVerifier("pytest tests/test_lru_cache.py")
     else:
-        verify_cmd = "pytest tests/test_lru_cache.py"
+        verifier = CommandVerifier("pytest tests/test_lru_cache.py")
 
-    verifier = CommandVerifier(verify_cmd)
     max_iterations = preset.max_iterations if preset else 50
 
     orchestrator = MoAOrchestrator(
@@ -191,7 +209,7 @@ def cli() -> None:
         max_iterations=max_iterations,
     )
 
-    success = asyncio.run(orchestrator.run_until_proven(task_desc))
+    success = await orchestrator.run_until_proven(task_desc)
     if success:
         console.print("[bold green]✨ Orchestration completed successfully![/bold green]")
         console.print("[cyan]Generated reports: moa_report.html, moa_report.md, moa_trace.json[/cyan]")
@@ -199,6 +217,20 @@ def cli() -> None:
         console.print("[bold red]❌ Orchestration stopped: max iterations reached.[/bold red]")
 
     sys.exit(0 if success else 1)
+
+
+def cli() -> None:
+    """CLI entry point for running the MoA Engine with Rich UI & Preset support."""
+    parser = argparse.ArgumentParser(description="Autonomous MoA Engine")
+    parser.add_argument("--task", help="Описание задачи")
+    parser.add_argument("--verify", help="Команда верификации")
+    parser.add_argument("--out", default="result.py", help="Файл для сохранения")
+    parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")
+    parser.add_argument("--context-url", nargs="+", help="URL(s) to fetch and append to the task description")
+    args = parser.parse_args()
+
+    asyncio.run(main(args))
+
 
 
 if __name__ == "__main__":

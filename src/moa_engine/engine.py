@@ -77,7 +77,7 @@ class MoAOrchestrator:
 
             artifact = Artifact(path=self._output_path, content=code)
 
-            result = self._verifier.verify(artifact)
+            result = await self._verifier.verify(artifact)
 
             # Log to reporter
             self._reporter.log_iteration(

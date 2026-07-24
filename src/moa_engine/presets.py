@@ -22,10 +22,22 @@ class PresetConfig:
     description: str
     max_iterations: int = 50
     output_path: str = "result.py"
-    verify_cmd: Optional[str] = None
+    verifier_config: Optional[Dict[str, Any]] = None
     proposers: List[AgentConfig] = field(default_factory=list)
     critic: Optional[AgentConfig] = None
     aggregator: Optional[AgentConfig] = None
+
+    @property
+    def verify_cmd(self) -> Optional[str]:
+        """Backward compatibility helper property for legacy verify_cmd access."""
+        if not self.verifier_config:
+            return None
+        if isinstance(self.verifier_config, str):
+            return self.verifier_config
+        if isinstance(self.verifier_config, dict):
+            if self.verifier_config.get("type") == "command":
+                return self.verifier_config.get("command") or self.verifier_config.get("verify_cmd")
+        return None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -43,13 +55,18 @@ class PresetConfig:
         proposers = [AgentConfig(**p) for p in data.get("proposers", [])]
         critic = AgentConfig(**data["critic"]) if data.get("critic") else None
         aggregator = AgentConfig(**data["aggregator"]) if data.get("aggregator") else None
-        
+
+        verifier_config = data.get("verifier_config")
+        if not verifier_config and "verify_cmd" in data:
+            cmd = data["verify_cmd"]
+            verifier_config = {"type": "command", "command": cmd}
+
         return cls(
             preset_name=data.get("preset_name", "default"),
             description=data.get("description", ""),
             max_iterations=data.get("max_iterations", 50),
             output_path=data.get("output_path", "result.py"),
-            verify_cmd=data.get("verify_cmd"),
+            verifier_config=verifier_config,
             proposers=proposers,
             critic=critic,
             aggregator=aggregator,
