@@ -49,14 +49,16 @@ class MoAOrchestrator:
             proposals_raw = await asyncio.gather(*tasks, return_exceptions=True)
             
             proposals: List[str] = []
-            for p in proposals_raw:
+            for agent, p in zip(self._proposers, proposals_raw):
+                client_name = agent._client.__class__.__name__
                 if isinstance(p, str) and p.strip() and not is_error_response(p):
-                    proposals.append(p)
+                    console.print(f"[green]✅ {client_name} успешно сгенерировал вариант ({len(p)} симв.)[/green]")
+                    proposals.append(f"### Вариант от {client_name}:\n{p}")
                 elif isinstance(p, str) and is_error_response(p):
                     first_err_line = p.strip().splitlines()[0] if p.strip() else p
-                    print(f"⚠️ Proposer agent error response filtered out: {first_err_line}", file=sys.stderr)
+                    console.print(f"[yellow]⚠️ {client_name} вернул ошибку: {first_err_line}[/yellow]")
                 elif isinstance(p, Exception):
-                    print(f"⚠️ Proposer agent raised exception: {p}", file=sys.stderr)
+                    console.print(f"[bold red]❌ {client_name} упал с исключением: {p}[/bold red]")
 
             if not proposals:
                 print("⚠️ Ни один агент не вернул валидный результат. Ожидание...", file=sys.stderr)
@@ -66,18 +68,23 @@ class MoAOrchestrator:
             critique = ""
             if self._critic:
                 try:
+                    critic_name = self._critic._client.__class__.__name__
                     crit_res = await self._critic.process(task)
                     if isinstance(crit_res, str) and not is_error_response(crit_res):
                         critique = crit_res
+                        console.print(f"[magenta]🕵️ {critic_name} провел ревью[/magenta]")
                     else:
                         print("⚠️ Critic agent returned error, skipping critique.", file=sys.stderr)
                 except Exception as e:
                     print(f"⚠️ Critic agent raised exception: {e}", file=sys.stderr)
 
+            agg_name = self._aggregator._client.__class__.__name__
             code = await self._aggregator.process_proposals(task, proposals, critique=critique)
             if is_error_response(code):
                 print("⚠️ Aggregator returned error, falling back to longest valid proposal.", file=sys.stderr)
                 code = max(proposals, key=len)
+            else:
+                console.print(f"[cyan]🧠 {agg_name} синтезировал итоговый код[/cyan]")
 
             artifact = Artifact(path=self._output_path, content=code)
 
