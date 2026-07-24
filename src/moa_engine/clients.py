@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 import subprocess
 import sys
 import httpx
@@ -312,8 +313,10 @@ class BaseCLIClient(LLMClient):
         timeout: float = 45.0,
     ) -> Optional[str]:
         """Safely execute a CLI command using subprocess_exec (no shell=True)."""
+        exe = shutil.which(cmd[0]) or cmd[0]
+        full_cmd = ["cmd.exe", "/c", exe] + cmd[1:] if sys.platform == "win32" and exe.lower().endswith((".cmd", ".bat")) else [exe] + cmd[1:]
         process = await asyncio.create_subprocess_exec(
-            *cmd,
+            *full_cmd,
             stdin=subprocess.PIPE if input_data is not None else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -342,7 +345,7 @@ class ClaudeCLIClient(BaseCLIClient):
             res = await self._exec_subprocess(
                 ["claude", "--print", "--model", model],
                 input_data=prompt_text.encode("utf-8"),
-                timeout=45.0,
+                timeout=120.0,
             )
             if res:
                 return res
@@ -357,7 +360,21 @@ class CopilotCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["copilot", "--silent", "--yolo"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
+            res = await self._exec_subprocess(["copilot", "--silent", "-p", prompt_text], timeout=120.0)
+            if res:
+                return res
+        except Exception:
+            pass
+
+        try:
+            res = await self._exec_subprocess(["copilot", "-p", prompt_text], timeout=120.0)
+            if res:
+                return res
+        except Exception:
+            pass
+
+        try:
+            res = await self._exec_subprocess(["copilot", "--silent", "--yolo"], input_data=prompt_text.encode("utf-8"), timeout=120.0)
             if res:
                 return res
         except Exception as e:
@@ -371,7 +388,14 @@ class CodexCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["codex", "exec"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
+            res = await self._exec_subprocess(["codex", "exec", "-"], input_data=prompt_text.encode("utf-8"), timeout=120.0)
+            if res:
+                return res
+        except Exception:
+            pass
+
+        try:
+            res = await self._exec_subprocess(["codex", "exec"], input_data=prompt_text.encode("utf-8"), timeout=120.0)
             if res:
                 return res
         except Exception as e:
@@ -385,13 +409,15 @@ class GeminiCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
+            exe = shutil.which("gemini") or "gemini"
+            full_cmd = ["cmd.exe", "/c", exe] if sys.platform == "win32" and exe.lower().endswith((".cmd", ".bat")) else [exe]
             process = await asyncio.create_subprocess_exec(
-                "gemini",
+                *full_cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(input=prompt_text.encode("utf-8")), timeout=45.0)
+            stdout, stderr = await asyncio.wait_for(process.communicate(input=prompt_text.encode("utf-8")), timeout=120.0)
             err_output = stderr.decode("utf-8", errors="ignore").strip() + "\n" + stdout.decode("utf-8", errors="ignore").strip()
             
             if process.returncode != 0 or "Error authenticating" in err_output or "Cloud Code Private API" in err_output:
@@ -416,7 +442,14 @@ class AntigravityCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
         try:
-            res = await self._exec_subprocess(["agy", "--dangerously-skip-permissions"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
+            res = await self._exec_subprocess(["agy", "--dangerously-skip-permissions", "-p", prompt_text], timeout=120.0)
+            if res:
+                return res
+        except Exception:
+            pass
+
+        try:
+            res = await self._exec_subprocess(["agy", "--dangerously-skip-permissions"], input_data=prompt_text.encode("utf-8"), timeout=120.0)
             if res:
                 return res
         except Exception as e:
@@ -430,32 +463,21 @@ class KiroCLIClient(BaseCLIClient):
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
 
-        # Attempt 1: kiro --print via stdin
         try:
-            res = await self._exec_subprocess(["kiro", "--print"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
-            if res:
+            res = await self._exec_subprocess(["kiro", "chat", "-m", "ask", prompt_text], timeout=120.0)
+            if res and not is_error_response(res) and "To read from stdin" not in res and len(res) > 50:
                 return res
         except Exception:
             pass
 
-        # Attempt 2: kiro -p via stdin
-        try:
-            res = await self._exec_subprocess(["kiro", "-p"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
-            if res:
-                return res
-        except Exception:
-            pass
+        # Headless CLI fallback to Codex / Claude
+        codex_client = CodexCLIClient()
+        res = await codex_client.generate(messages, temperature)
+        if res and not is_error_response(res):
+            return res
 
-        # Attempt 3: kiro via stdin pipe
-        try:
-            res = await self._exec_subprocess(["kiro"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
-            if res:
-                return res
-        except Exception as e:
-            print(f"⚠️ Kiro CLI unavailable: {e}", file=sys.stderr)
-            return f"# Kiro CLI error: {e}\npass\n"
-
-        return "# Kiro CLI error: all three invocation strategies returned empty or non-zero\npass\n"
+        claude_client = ClaudeCLIClient()
+        return await claude_client.generate(messages, temperature)
 
 
 CLIENT_REGISTRY: Dict[str, Type[LLMClient]] = {

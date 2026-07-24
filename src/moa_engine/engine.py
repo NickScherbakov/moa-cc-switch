@@ -2,6 +2,8 @@ import asyncio
 import sys
 from typing import List, Optional
 
+from rich.console import Console
+
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
 from moa_engine.clients import is_error_response
 from moa_engine.domain import Artifact, Task
@@ -10,6 +12,8 @@ from moa_engine.verifiers import VerifierStrategy
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
+console = Console()
 
 
 class MoAOrchestrator:
@@ -77,7 +81,11 @@ class MoAOrchestrator:
 
             artifact = Artifact(path=self._output_path, content=code)
 
-            result = await self._verifier.verify(artifact)
+            try:
+                result = await self._verifier.verify(artifact)
+            except Exception as e:
+                console.print(f"[bold red]Ошибка верификации (инфраструктура): {e}[/bold red]")
+                continue
 
             # Log to reporter
             self._reporter.log_iteration(

@@ -52,7 +52,7 @@ def test_infolimp_audit_preset_loading():
     assert preset.preset_name == "infolimp-audit"
     assert preset.verifier_config is not None
     assert preset.verifier_config["type"] == "llm"
-    assert "8 пунктов" in preset.verifier_config["evaluation_prompt"]
+    assert "infolimp.ru" in preset.verifier_config["evaluation_prompt"]
     assert len(preset.proposers) == 4
     for p in preset.proposers:
         assert p.system_prompt is not None

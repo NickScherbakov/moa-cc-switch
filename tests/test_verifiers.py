@@ -77,9 +77,8 @@ async def test_llm_verifier_invalid_json(tmp_path):
     verifier = LLMVerifier(client=client, evaluation_prompt="Проверь")
     art = Artifact(path=str(tmp_path / "result.md"), content="Текст")
 
-    res = await verifier.verify(art)
-    assert res.is_success is False
-    assert "Ошибка парсинга JSON" in res.output_log
+    with pytest.raises(RuntimeError, match="Внутренняя ошибка LLM-верификатора"):
+        await verifier.verify(art)
 
 
 @pytest.mark.asyncio

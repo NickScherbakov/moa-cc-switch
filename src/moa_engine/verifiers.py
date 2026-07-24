@@ -100,13 +100,6 @@ class LLMVerifier(VerifierStrategy):
 
         try:
             raw_response = await self._client.generate(messages, temperature=0.0)
-        except Exception as e:
-            return VerificationResult(
-                is_success=False,
-                output_log=f"Ошибка при вызове LLM верификатора: {e}",
-            )
-
-        try:
             cleaned_text = raw_response.strip()
             match = re.search(r"\{.*\}", cleaned_text, re.DOTALL)
             json_text = match.group(0) if match else cleaned_text
@@ -119,7 +112,4 @@ class LLMVerifier(VerifierStrategy):
             reason = str(data.get("reason", ""))
             return VerificationResult(is_success=is_success, output_log=reason)
         except Exception as e:
-            return VerificationResult(
-                is_success=False,
-                output_log=f"Ошибка парсинга JSON ответа LLM: {e}\nСырой ответ: {raw_response}",
-            )
+            raise RuntimeError(f"Внутренняя ошибка LLM-верификатора: {e}")
