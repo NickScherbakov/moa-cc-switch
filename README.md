@@ -65,15 +65,15 @@ classDiagram
 
     class LLMClient {
         <<abstract>>
-        +generate(messages: List~Message~, temperature: float)* str
+        +generate(messages, temperature)* str
     }
 
     class HTTPDialect {
         <<abstract>>
-        +get_url(endpoint: str)* str
-        +get_headers(api_key: str)* Dict
-        +get_payload(model_name: str, messages: List~Message~, temperature: float)* Dict
-        +parse_response(data: Dict)* str
+        +get_url(endpoint)* str
+        +get_headers(api_key)* Dict
+        +get_payload(model_name, messages, temperature)* Dict
+        +parse_response(data)* str
     }
     class AnthropicDialect {
         +get_url(...) str
@@ -89,15 +89,15 @@ classDiagram
         #str api_key_env
         #str model_name
         #HTTPDialect _dialect
-        +generate(messages: List~Message~, temperature: float) str
+        +generate(messages, temperature) str
     }
     LLMClient <|.. BaseHTTPClient
     BaseHTTPClient o-- HTTPDialect
 
     class CCSwitchClient {
         +str provider_name
-        +generate(messages: List~Message~, temperature: float) str
-        -_fallback_via_cli(messages: List~Message~) str
+        +generate(messages, temperature) str
+        -_fallback_via_cli(messages) str
     }
     class OpenAIClient
     class DeepSeekClient
@@ -106,8 +106,8 @@ classDiagram
     BaseHTTPClient <|-- DeepSeekClient
 
     class BaseCLIClient {
-        +format_prompt(messages: List~Message~) str
-        #_exec_subprocess(cmd: List~str~, input_data: bytes, timeout: float) str
+        +format_prompt(messages) str
+        #_exec_subprocess(cmd, input_data, timeout) str
     }
     LLMClient <|.. BaseCLIClient
 
@@ -128,18 +128,18 @@ classDiagram
         <<abstract>>
         #LLMClient _client
         #str system_prompt
-        +process(task: Task)* str
+        +process(task)* str
     }
     class ProposerAgent {
         +float temperature
-        +process(task: Task) str
+        +process(task) str
     }
     class CriticAgent {
-        +process(task: Task) str
+        +process(task) str
     }
     class AggregatorAgent {
-        +process_proposals(task: Task, proposals: List~str~, critique: str) str
-        +process(task: Task) str
+        +process_proposals(task, proposals, critique) str
+        +process(task) str
     }
     Agent <|.. ProposerAgent
     Agent <|.. CriticAgent
@@ -148,16 +148,16 @@ classDiagram
 
     class VerifierStrategy {
         <<abstract>>
-        +verify(artifact: Artifact)* VerificationResult
+        +verify(artifact)* VerificationResult
     }
     class CommandVerifier {
         -str _command
         -int _timeout
-        +verify(artifact: Artifact) VerificationResult
+        +verify(artifact) VerificationResult
     }
     class CompositeVerifier {
         -List~VerifierStrategy~ _verifiers
-        +verify(artifact: Artifact) VerificationResult
+        +verify(artifact) VerificationResult
     }
     VerifierStrategy <|.. CommandVerifier
     VerifierStrategy <|.. CompositeVerifier
@@ -170,7 +170,7 @@ classDiagram
         -CriticAgent _critic
         -str _output_path
         -int _max_iterations
-        +run_until_proven(task_description: str) bool
+        +run_until_proven(task_description) bool
     }
     MoAOrchestrator o-- ProposerAgent
     MoAOrchestrator o-- AggregatorAgent
