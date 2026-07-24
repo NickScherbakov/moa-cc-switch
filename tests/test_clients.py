@@ -3,13 +3,16 @@ import respx
 import httpx
 from moa_engine.domain import Message
 from moa_engine.clients import (
+    CLIENT_REGISTRY,
     AnthropicDialect,
     BaseHTTPClient,
     CCSwitchClient,
+    ClaudeCLIClient,
     DeepSeekClient,
     OllamaClient,
     OpenAIDialect,
     OpenAIClient,
+    build_client,
     is_error_response,
 )
 
@@ -89,4 +92,33 @@ def test_is_error_response_helper():
     assert is_error_response("# Local Ollama endpoint unreachable (http://loc): err\npass\n") is True
     assert is_error_response("class LRUCache:\n    pass") is False
     assert is_error_response("") is True
+
+
+def test_client_registry_and_build_client():
+    # Test registry entries
+    assert "openai" in CLIENT_REGISTRY
+    assert "claude" in CLIENT_REGISTRY
+    assert "claude-cli" in CLIENT_REGISTRY
+
+    # Test build_client for registered clients
+    cli_client = build_client("claude-cli", "default")
+    assert isinstance(cli_client, ClaudeCLIClient)
+    assert cli_client.model_name == "haiku"
+
+    openai_client = build_client("openai", "default")
+    assert isinstance(openai_client, OpenAIClient)
+    assert openai_client.model_name == "gpt-4o-mini"
+
+    deepseek_client = build_client("deepseek", "deepseek-reasoner")
+    assert isinstance(deepseek_client, DeepSeekClient)
+    assert deepseek_client.model_name == "deepseek-reasoner"
+
+    ollama_client = build_client("ollama", "default")
+    assert isinstance(ollama_client, OllamaClient)
+    assert ollama_client.model_name == "qwen2.5-coder"
+
+    # Test fallback to CCSwitchClient when provider not in registry
+    fallback_client = build_client("unknown-provider", "default")
+    assert isinstance(fallback_client, CCSwitchClient)
+
 

@@ -9,68 +9,13 @@ from rich.console import Console
 from rich.panel import Panel
 
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
-from moa_engine.clients import (
-    AnthropicDialect,
-    AntigravityCLIClient,
-    BaseHTTPClient,
-    CCSwitchClient,
-    ClaudeCLIClient,
-    CodexCLIClient,
-    CopilotCLIClient,
-    DeepSeekClient,
-    GeminiCLIClient,
-    KiroCLIClient,
-    OllamaClient,
-    OpenAIDialect,
-    OpenAIClient,
-)
+from moa_engine.clients import build_client
 from moa_engine.config import config
 from moa_engine.engine import MoAOrchestrator
 from moa_engine.presets import PresetConfig
 from moa_engine.verifiers import CommandVerifier, CompositeVerifier, LLMVerifier
 
 console = Console()
-
-
-def build_client_from_config(provider: str, model: str, endpoint: Optional[str] = None, api_key_env: Optional[str] = None):
-    provider_lower = provider.lower()
-    is_default_model = not model or model == "default"
-
-    if provider_lower in ("antigravity-cli", "antigravity", "agy"):
-        return AntigravityCLIClient(model_name=model)
-    elif provider_lower in ("claude-cli", "claude"):
-        return ClaudeCLIClient(model_name="haiku" if is_default_model else model)
-    elif provider_lower in ("copilot-cli", "copilot"):
-        return CopilotCLIClient(model_name=model)
-    elif provider_lower in ("codex-cli", "codex"):
-        return CodexCLIClient(model_name=model)
-    elif provider_lower in ("gemini-cli", "gemini"):
-        return GeminiCLIClient(model_name=model)
-    elif provider_lower in ("kiro-cli", "kiro"):
-        return KiroCLIClient(model_name=model)
-    elif provider_lower == "openai":
-        target_model = "gpt-4o-mini" if is_default_model else model
-        return OpenAIClient(endpoint=endpoint or "https://api.openai.com/v1", api_key_env=api_key_env or "OPENAI_API_KEY", model_name=target_model)
-    elif provider_lower == "deepseek":
-        target_model = "deepseek-coder" if is_default_model else model
-        return DeepSeekClient(endpoint=endpoint or "https://api.deepseek.com/v1", api_key_env=api_key_env or "DEEPSEEK_API_KEY", model_name=target_model)
-    elif provider_lower == "ollama":
-        target_model = "qwen2.5-coder" if is_default_model else model
-        return OllamaClient(endpoint=endpoint or "http://localhost:11434", model_name=target_model)
-    else:
-        dialect = AnthropicDialect() if "anthropic" in provider_lower else OpenAIDialect()
-        if is_default_model:
-            target_model = "claude-3-5-haiku-20241022" if "anthropic" in provider_lower else "gpt-4o-mini"
-        else:
-            target_model = model
-
-        return CCSwitchClient(
-            provider_name=provider,
-            endpoint=endpoint or "https://api.anthropic.com",
-            api_key_env=api_key_env or "ANTHROPIC_API_KEY",
-            model_name=target_model,
-            dialect=dialect,
-        )
 
 
 def parse_html_to_text(html: str) -> str:
@@ -130,7 +75,7 @@ async def main(args: argparse.Namespace) -> None:
         
         proposers = [
             ProposerAgent(
-                build_client_from_config(p.provider, p.model, p.endpoint, p.api_key_env),
+                build_client(p.provider, p.model, p.endpoint, p.api_key_env),
                 temperature=p.temperature,
                 system_prompt=p.system_prompt,
             )
@@ -138,7 +83,7 @@ async def main(args: argparse.Namespace) -> None:
         ]
         critic = (
             CriticAgent(
-                build_client_from_config(preset.critic.provider, preset.critic.model, preset.critic.endpoint, preset.critic.api_key_env),
+                build_client(preset.critic.provider, preset.critic.model, preset.critic.endpoint, preset.critic.api_key_env),
                 system_prompt=preset.critic.system_prompt,
             )
             if preset.critic
@@ -146,11 +91,11 @@ async def main(args: argparse.Namespace) -> None:
         )
         aggregator = (
             AggregatorAgent(
-                build_client_from_config(preset.aggregator.provider, preset.aggregator.model, preset.aggregator.endpoint, preset.aggregator.api_key_env),
+                build_client(preset.aggregator.provider, preset.aggregator.model, preset.aggregator.endpoint, preset.aggregator.api_key_env),
                 system_prompt=preset.aggregator.system_prompt,
             )
             if preset.aggregator
-            else AggregatorAgent(CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY"))
+            else AggregatorAgent(build_client("anthropic", "default"))
         )
     else:
         console.print(
@@ -162,8 +107,8 @@ async def main(args: argparse.Namespace) -> None:
             )
         )
 
-        claude_client = CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY", model_name="claude-3-5-haiku-20241022")
-        gpt_client = CCSwitchClient("openai", "https://api.openai.com/v1", "OPENAI_API_KEY", model_name="gpt-4o-mini")
+        claude_client = build_client("anthropic", "claude-3-5-haiku-20241022")
+        gpt_client = build_client("openai", "gpt-4o-mini")
 
         proposers = [
             ProposerAgent(gpt_client, temperature=0.8),
@@ -178,14 +123,14 @@ async def main(args: argparse.Namespace) -> None:
         vc = preset.verifier_config
         if isinstance(vc, dict) and vc.get("type") == "llm":
             if "provider" in vc:
-                verifier_client = build_client_from_config(
+                verifier_client = build_client(
                     provider=vc["provider"],
                     model=vc.get("model", "gpt-4o-mini"),
                     endpoint=vc.get("endpoint"),
                     api_key_env=vc.get("api_key_env"),
                 )
             else:
-                verifier_client = OpenAIClient(model_name=vc.get("model", "gpt-4o-mini"))
+                verifier_client = build_client("openai", vc.get("model", "gpt-4o-mini"))
             eval_prompt = vc.get("evaluation_prompt", "")
             verifier = LLMVerifier(client=verifier_client, evaluation_prompt=eval_prompt)
         elif isinstance(vc, dict) and vc.get("type") == "command":

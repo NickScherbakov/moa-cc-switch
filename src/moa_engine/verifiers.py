@@ -1,5 +1,6 @@
 import json
 import asyncio
+import re
 import shlex
 import subprocess
 from abc import ABC, abstractmethod
@@ -107,15 +108,10 @@ class LLMVerifier(VerifierStrategy):
 
         try:
             cleaned_text = raw_response.strip()
-            if cleaned_text.startswith("```"):
-                lines = cleaned_text.splitlines()
-                if lines and lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                cleaned_text = "\n".join(lines).strip()
+            match = re.search(r"\{.*\}", cleaned_text, re.DOTALL)
+            json_text = match.group(0) if match else cleaned_text
 
-            data = json.loads(cleaned_text)
+            data = json.loads(json_text)
             if not isinstance(data, dict):
                 raise ValueError(f"Ожидался JSON объект dict, получено: {type(data)}")
 

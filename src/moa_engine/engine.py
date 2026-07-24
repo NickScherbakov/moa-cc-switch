@@ -101,7 +101,7 @@ class MoAOrchestrator:
             task = Task(
                 description=task_description,
                 error_history=(
-                    f"Итерация {iteration} завершилась ошибкой:\n{result.output_log}"
+                    task.error_history + f"\n\n--- Ошибки Итерации {iteration} ---\n{result.output_log}"
                 ),
             )
 

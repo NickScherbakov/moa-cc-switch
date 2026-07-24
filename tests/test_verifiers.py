@@ -80,3 +80,16 @@ async def test_llm_verifier_invalid_json(tmp_path):
     res = await verifier.verify(art)
     assert res.is_success is False
     assert "Ошибка парсинга JSON" in res.output_log
+
+
+@pytest.mark.asyncio
+async def test_llm_verifier_regex_json_parsing(tmp_path):
+    response = "Вот разбор:\n```json\n{\"is_success\": true, \"reason\": \"Найден через regex\"}\n```\nНадеюсь помогло!"
+    client = DummyLLMClient(response)
+    verifier = LLMVerifier(client=client, evaluation_prompt="Проверь")
+    art = Artifact(path=str(tmp_path / "result.md"), content="Текст")
+
+    res = await verifier.verify(art)
+    assert res.is_success is True
+    assert res.output_log == "Найден через regex"
+

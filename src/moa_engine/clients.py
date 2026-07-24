@@ -4,7 +4,7 @@ import subprocess
 import sys
 import httpx
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Type
 
 from moa_engine.domain import Message
 from moa_engine.config import config
@@ -456,3 +456,95 @@ class KiroCLIClient(BaseCLIClient):
             return f"# Kiro CLI error: {e}\npass\n"
 
         return "# Kiro CLI error: all three invocation strategies returned empty or non-zero\npass\n"
+
+
+CLIENT_REGISTRY: Dict[str, Type[LLMClient]] = {
+    "openai": OpenAIClient,
+    "deepseek": DeepSeekClient,
+    "ollama": OllamaClient,
+    "claude": ClaudeCLIClient,
+    "claude-cli": ClaudeCLIClient,
+    "copilot": CopilotCLIClient,
+    "copilot-cli": CopilotCLIClient,
+    "codex": CodexCLIClient,
+    "codex-cli": CodexCLIClient,
+    "gemini": GeminiCLIClient,
+    "gemini-cli": GeminiCLIClient,
+    "kiro": KiroCLIClient,
+    "kiro-cli": KiroCLIClient,
+    "antigravity": AntigravityCLIClient,
+    "antigravity-cli": AntigravityCLIClient,
+    "agy": AntigravityCLIClient,
+}
+
+
+def build_client(
+    provider: str,
+    model: str,
+    endpoint: Optional[str] = None,
+    api_key_env: Optional[str] = None,
+) -> LLMClient:
+    """Factory function using CLIENT_REGISTRY to build LLMClient instances by provider name."""
+    provider_lower = provider.lower()
+    is_default_model = not model or model == "default"
+
+    if provider_lower in CLIENT_REGISTRY:
+        client_cls = CLIENT_REGISTRY[provider_lower]
+        if issubclass(client_cls, BaseCLIClient):
+            if client_cls is ClaudeCLIClient:
+                target_model = "haiku" if is_default_model else model
+            else:
+                target_model = "default" if is_default_model else model
+            return client_cls(model_name=target_model)
+        elif client_cls is OpenAIClient:
+            target_model = "gpt-4o-mini" if is_default_model else model
+            return OpenAIClient(
+                endpoint=endpoint or "https://api.openai.com/v1",
+                api_key_env=api_key_env or "OPENAI_API_KEY",
+                model_name=target_model,
+            )
+        elif client_cls is DeepSeekClient:
+            target_model = "deepseek-coder" if is_default_model else model
+            return DeepSeekClient(
+                endpoint=endpoint or "https://api.deepseek.com/v1",
+                api_key_env=api_key_env or "DEEPSEEK_API_KEY",
+                model_name=target_model,
+            )
+        elif client_cls is OllamaClient:
+            target_model = "qwen2.5-coder" if is_default_model else model
+            return OllamaClient(
+                endpoint=endpoint or "http://localhost:11434",
+                model_name=target_model,
+            )
+        else:
+            kwargs: Dict[str, Any] = {}
+            if model and not is_default_model:
+                kwargs["model_name"] = model
+            if endpoint:
+                kwargs["endpoint"] = endpoint
+            if api_key_env:
+                kwargs["api_key_env"] = api_key_env
+            try:
+                return client_cls(**kwargs)
+            except TypeError:
+                return client_cls()
+
+    # Fallback to CCSwitchClient if provider not in CLIENT_REGISTRY
+    is_anthropic = "anthropic" in provider_lower
+    dialect = AnthropicDialect() if is_anthropic else OpenAIDialect()
+    if is_default_model:
+        target_model = "claude-3-5-haiku-20241022" if is_anthropic else "gpt-4o-mini"
+    else:
+        target_model = model
+
+    default_endpoint = "https://api.anthropic.com" if is_anthropic else "https://api.openai.com/v1"
+    default_api_key_env = "ANTHROPIC_API_KEY" if is_anthropic else "OPENAI_API_KEY"
+
+    return CCSwitchClient(
+        provider_name=provider,
+        endpoint=endpoint or default_endpoint,
+        api_key_env=api_key_env or default_api_key_env,
+        model_name=target_model,
+        dialect=dialect,
+    )
+

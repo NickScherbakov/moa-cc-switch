@@ -99,3 +99,29 @@ async def test_fetch_urls_context_gather(respx_mock):
     assert "Website Context (http://example2.com)" in context
 
 
+@pytest.mark.asyncio
+async def test_orchestrator_cumulative_error_history(respx_mock, monkeypatch):
+    monkeypatch.setenv("MOCK_KEY", "mock-token")
+    respx_mock.post("http://localhost:8080/v1/chat/completions").respond(
+        json={"choices": [{"message": {"content": "class LRUCache:\n    pass"}}]}
+    )
+    client = CCSwitchClient("test-provider", "http://localhost:8080", "MOCK_KEY")
+    proposer = ProposerAgent(client)
+    aggregator = AggregatorAgent(client)
+    verifier = CommandVerifier("python -c \"import sys; sys.exit(1)\"")
+
+    orchestrator = MoAOrchestrator(
+        proposers=[proposer],
+        aggregator=aggregator,
+        verifier=verifier,
+        output_path="test_fail_output.py",
+        max_iterations=2,
+    )
+
+    success = await orchestrator.run_until_proven("Failing Task")
+    assert success is False
+    if os.path.exists("test_fail_output.py"):
+        os.remove("test_fail_output.py")
+
+
+

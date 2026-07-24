@@ -9,8 +9,8 @@ from moa_engine.clients import (
     CodexCLIClient,
     CopilotCLIClient,
     GeminiCLIClient,
+    build_client,
 )
-from moa_engine.runner import build_client_from_config
 from moa_engine.agents import ProposerAgent, AggregatorAgent
 from moa_engine.engine import MoAOrchestrator
 from moa_engine.verifiers import CommandVerifier
@@ -23,13 +23,13 @@ def test_installed_cli_binaries_exist():
         assert binary_path is not None, f"CLI agent binary '{cli_name}' not found on system PATH"
 
 
-def test_build_client_from_config_cli_agents():
+def test_build_client_cli_agents():
     """Verify factory returns appropriate CLI agent client instances."""
-    assert isinstance(build_client_from_config("antigravity", "default"), AntigravityCLIClient)
-    assert isinstance(build_client_from_config("claude", "default"), ClaudeCLIClient)
-    assert isinstance(build_client_from_config("copilot", "default"), CopilotCLIClient)
-    assert isinstance(build_client_from_config("codex", "default"), CodexCLIClient)
-    assert isinstance(build_client_from_config("gemini", "default"), GeminiCLIClient)
+    assert isinstance(build_client("antigravity", "default"), AntigravityCLIClient)
+    assert isinstance(build_client("claude", "default"), ClaudeCLIClient)
+    assert isinstance(build_client("copilot", "default"), CopilotCLIClient)
+    assert isinstance(build_client("codex", "default"), CodexCLIClient)
+    assert isinstance(build_client("gemini", "default"), GeminiCLIClient)
 
 
 
