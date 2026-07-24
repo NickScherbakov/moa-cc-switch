@@ -34,31 +34,41 @@ console = Console()
 
 def build_client_from_config(provider: str, model: str, endpoint: Optional[str] = None, api_key_env: Optional[str] = None):
     provider_lower = provider.lower()
+    is_default_model = not model or model == "default"
+
     if provider_lower in ("antigravity-cli", "antigravity", "agy"):
-        return AntigravityCLIClient()
+        return AntigravityCLIClient(model_name=model)
     elif provider_lower in ("claude-cli", "claude"):
-        return ClaudeCLIClient()
+        return ClaudeCLIClient(model_name="haiku" if is_default_model else model)
     elif provider_lower in ("copilot-cli", "copilot"):
-        return CopilotCLIClient()
+        return CopilotCLIClient(model_name=model)
     elif provider_lower in ("codex-cli", "codex"):
-        return CodexCLIClient()
+        return CodexCLIClient(model_name=model)
     elif provider_lower in ("gemini-cli", "gemini"):
-        return GeminiCLIClient()
+        return GeminiCLIClient(model_name=model)
     elif provider_lower in ("kiro-cli", "kiro"):
-        return KiroCLIClient()
+        return KiroCLIClient(model_name=model)
     elif provider_lower == "openai":
-        return OpenAIClient(endpoint=endpoint or "https://api.openai.com/v1", api_key_env=api_key_env or "OPENAI_API_KEY", model_name=model)
+        target_model = "gpt-4o-mini" if is_default_model else model
+        return OpenAIClient(endpoint=endpoint or "https://api.openai.com/v1", api_key_env=api_key_env or "OPENAI_API_KEY", model_name=target_model)
     elif provider_lower == "deepseek":
-        return DeepSeekClient(endpoint=endpoint or "https://api.deepseek.com/v1", api_key_env=api_key_env or "DEEPSEEK_API_KEY", model_name=model)
+        target_model = "deepseek-coder" if is_default_model else model
+        return DeepSeekClient(endpoint=endpoint or "https://api.deepseek.com/v1", api_key_env=api_key_env or "DEEPSEEK_API_KEY", model_name=target_model)
     elif provider_lower == "ollama":
-        return OllamaClient(endpoint=endpoint or "http://localhost:11434", model_name=model)
+        target_model = "qwen2.5-coder" if is_default_model else model
+        return OllamaClient(endpoint=endpoint or "http://localhost:11434", model_name=target_model)
     else:
         dialect = AnthropicDialect() if "anthropic" in provider_lower else OpenAIDialect()
+        if is_default_model:
+            target_model = "claude-3-5-haiku-20241022" if "anthropic" in provider_lower else "gpt-4o-mini"
+        else:
+            target_model = model
+
         return CCSwitchClient(
             provider_name=provider,
             endpoint=endpoint or "https://api.anthropic.com",
             api_key_env=api_key_env or "ANTHROPIC_API_KEY",
-            model_name=model,
+            model_name=target_model,
             dialect=dialect,
         )
 
@@ -152,8 +162,8 @@ def cli() -> None:
             )
         )
 
-        claude_client = CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY")
-        gpt_client = CCSwitchClient("openai", "https://api.openai.com/v1", "OPENAI_API_KEY")
+        claude_client = CCSwitchClient("anthropic", "https://api.anthropic.com", "ANTHROPIC_API_KEY", model_name="claude-3-5-haiku-20241022")
+        gpt_client = CCSwitchClient("openai", "https://api.openai.com/v1", "OPENAI_API_KEY", model_name="gpt-4o-mini")
 
         proposers = [
             ProposerAgent(gpt_client, temperature=0.8),

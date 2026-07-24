@@ -172,7 +172,7 @@ class CCSwitchClient(BaseHTTPClient):
         provider_name: str,
         endpoint: str,
         api_key_env: str,
-        model_name: str = "claude-3-5-sonnet-20241022",
+        model_name: str = "claude-3-5-haiku-20241022",
         dialect: Optional[HTTPDialect] = None,
         http_client: Optional[httpx.AsyncClient] = None,
     ):
@@ -223,13 +223,13 @@ class CCSwitchClient(BaseHTTPClient):
 
 
 class OpenAIClient(BaseHTTPClient):
-    """Direct provider driver for OpenAI models (GPT-4o, GPT-3.5, etc.)."""
+    """Direct provider driver for OpenAI models (GPT-4o, GPT-4o-mini, etc.)."""
 
     def __init__(
         self,
         endpoint: str = "https://api.openai.com/v1",
         api_key_env: str = "OPENAI_API_KEY",
-        model_name: str = "gpt-4o",
+        model_name: str = "gpt-4o-mini",
         http_client: Optional[httpx.AsyncClient] = None,
     ):
         super().__init__(
@@ -299,6 +299,9 @@ class OllamaClient(LLMClient):
 class BaseCLIClient(LLMClient):
     """Base class for CLI agent drivers providing safe subprocess execution without shell invocation."""
 
+    def __init__(self, model_name: str = "default"):
+        self.model_name = model_name
+
     def format_prompt(self, messages: List[Message]) -> str:
         return "\n".join([f"{m.role}: {m.content}" for m in messages])
 
@@ -329,10 +332,18 @@ class BaseCLIClient(LLMClient):
 class ClaudeCLIClient(BaseCLIClient):
     """Direct CLI agent driver for installed Claude Code CLI."""
 
+    def __init__(self, model_name: str = "haiku"):
+        super().__init__(model_name=model_name)
+
     async def generate(self, messages: List[Message], temperature: float = 0.7) -> str:
         prompt_text = self.format_prompt(messages)
+        model = self.model_name if self.model_name and self.model_name != "default" else "haiku"
         try:
-            res = await self._exec_subprocess(["claude", "--print"], input_data=prompt_text.encode("utf-8"), timeout=45.0)
+            res = await self._exec_subprocess(
+                ["claude", "--print", "--model", model],
+                input_data=prompt_text.encode("utf-8"),
+                timeout=45.0,
+            )
             if res:
                 return res
         except Exception as e:
