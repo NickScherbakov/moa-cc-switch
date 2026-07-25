@@ -391,10 +391,17 @@ pytest
 
 ## 👥 Authors & Contributors
 
+The **moa-cc-switch** project is developed through a synergistic collaboration between human leadership and an autonomous AI engineering swarm:
+
 | Role | Contributor | Contributions |
 |---|---|---|
-| Lead Architect & Author | [NickScherbakov](https://github.com/NickScherbakov) | MoA Engine Core Architecture, CC Switch Integration, HTTP Transport & Dialects, CLI Drivers, Action Layer & Tool Registry, Multi-Context Scraping, Verification Strategies |
-| Co-Author | [Kiro](https://kiro.dev) (AI Assistant) | Specification & implementation of `KiroCLIClient`, `BaseHTTPClient` / `BaseCLIClient` refactoring, documentation revision |
+| Lead Architect & Project Author | [NickScherbakov](https://github.com/NickScherbakov) | MoA Engine Core Architecture, CC Switch Integration, HTTP Transport & Dialects, CLI Drivers, Action Layer & Tool Registry, Multi-Context Scraping, Verification Strategies |
+| AI Co-Author & Pair Programmer | **Antigravity** (Google DeepMind) | Autonomous agentic coding, full codebase auditing, unified documentation synthesis, system-level refactoring, and multi-agent workflow orchestration |
+| AI Synergist & High-Reasoning Specialist | **Gemini 3.1 Pro Extended** (Google DeepMind) | Deep architectural reasoning, long-context analysis, complex task decomposition, and verification strategy optimization |
+| AI Synergist & Driver Specialist | **[Kiro](https://kiro.dev)** (AWS / Kiro AI) | Specification & implementation of `KiroCLIClient`, `BaseHTTPClient` / `BaseCLIClient` hierarchy refactoring, documentation revision |
+| AI Synergist Swarm (Anthropic) | **Claude 3.5 Sonnet / Haiku** | Proposer & Aggregator reasoning, system prompt injection, and CC Switch routing integration |
+| AI Synergist Swarm (OpenAI) | **GPT-4o / GPT-4o-mini** | Proposer generation & `LLMVerifier` semantic evaluation strategy |
+| AI Synergist Swarm (DeepSeek) | **DeepSeek-V3 / Coder** | High-efficiency code generation, algorithmic optimization, and reasoning |
 
 ---
 
