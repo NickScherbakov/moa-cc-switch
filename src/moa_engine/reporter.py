@@ -20,6 +20,10 @@ class ExecutionReporter:
 
     def __init__(self):
         self.logs: List[IterationLog] = []
+        self.synergy_goal: str = ""
+
+    def set_synergy_goal(self, goal: str) -> None:
+        self.synergy_goal = goal
 
     def log_iteration(
         self,
@@ -46,6 +50,7 @@ class ExecutionReporter:
     def generate_json_trace(self, output_file: str = "moa_trace.json") -> str:
         data = {
             "total_iterations": len(self.logs),
+            "synergy_goal": self.synergy_goal,
             "final_success": self.logs[-1].is_success if self.logs else False,
             "iterations": [asdict(log) for log in self.logs],
         }
@@ -56,6 +61,8 @@ class ExecutionReporter:
     def generate_markdown_report(self, output_file: str = "moa_report.md") -> str:
         md = ["# 🚀 MoA Engine Execution Trace\n"]
         md.append(f"- Total Iterations: **{len(self.logs)}**\n")
+        if self.synergy_goal:
+            md.append(f"- **Synergy Goal**: {self.synergy_goal}\n\n")
 
         for log in self.logs:
             status = "✅ PASSED" if log.is_success else "❌ FAILED"
@@ -92,6 +99,7 @@ class ExecutionReporter:
 <body>
     <h1>🚀 MoA Engine Execution Report</h1>
     <p>Total Iterations: <strong>{len(self.logs)}</strong></p>
+    {f'<p>Synergy Goal: <em>{self.synergy_goal}</em></p>' if self.synergy_goal else ''}
 """
         for log in self.logs:
             badge = '<span class="badge badge-success">PASSED</span>' if log.is_success else '<span class="badge badge-failure">FAILED</span>'

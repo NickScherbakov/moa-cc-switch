@@ -92,3 +92,16 @@ async def test_llm_verifier_regex_json_parsing(tmp_path):
     assert res.is_success is True
     assert res.output_log == "Найден через regex"
 
+
+@pytest.mark.asyncio
+async def test_llm_verifier_synergy_goal_injection(tmp_path):
+    client = DummyLLMClient('{"is_success": true, "reason": "Цель учтена"}')
+    verifier = LLMVerifier(client=client, evaluation_prompt="Проверь")
+    art = Artifact(path=str(tmp_path / "result.md"), content="Текст")
+
+    res = await verifier.verify(art, synergy_goal="Максимальное качество кода")
+    assert res.is_success is True
+    system_msg = client.last_messages[0].content
+    assert "Максимальное качество кода" in system_msg
+    assert "главную цель команды" in system_msg
+

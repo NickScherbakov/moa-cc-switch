@@ -103,6 +103,7 @@ class MoAOrchestrator:
     async def run_until_proven(self, task_description: str, synergy_goal: str = "") -> bool:
 
         """Run Mixture-of-Agents loop iteratively until verification succeeds or max iterations reached."""
+        self._reporter.set_synergy_goal(synergy_goal)
         task = Task(description=task_description, synergy_goal=synergy_goal)
 
         for iteration in range(1, self._max_iterations + 1):
@@ -153,7 +154,7 @@ class MoAOrchestrator:
             artifact = Artifact(path=self._output_path, content=code)
 
             try:
-                result = await self._verifier.verify(artifact)
+                result = await self._verifier.verify(artifact, task.synergy_goal)
             except Exception as e:
                 console.print(f"[bold red]Ошибка верификации (инфраструктура): {e}[/bold red]")
                 continue

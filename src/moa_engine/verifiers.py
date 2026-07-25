@@ -14,7 +14,7 @@ class VerifierStrategy(ABC):
     """Abstract Strategy interface for verifying generated artifacts."""
 
     @abstractmethod
-    async def verify(self, artifact: Artifact) -> VerificationResult:
+    async def verify(self, artifact: Artifact, synergy_goal: str = "") -> VerificationResult:
         """Verify the artifact and return a deterministic verification result."""
         pass
 
@@ -26,7 +26,7 @@ class CommandVerifier(VerifierStrategy):
         self._command = command
         self._timeout = timeout
 
-    async def verify(self, artifact: Artifact) -> VerificationResult:
+    async def verify(self, artifact: Artifact, synergy_goal: str = "") -> VerificationResult:
         artifact.save()
         try:
             cmd_args = shlex.split(self._command)
@@ -58,10 +58,10 @@ class CompositeVerifier(VerifierStrategy):
     def __init__(self, verifiers: List[VerifierStrategy]):
         self._verifiers = verifiers
 
-    async def verify(self, artifact: Artifact) -> VerificationResult:
+    async def verify(self, artifact: Artifact, synergy_goal: str = "") -> VerificationResult:
         combined_log = []
         for index, verifier in enumerate(self._verifiers, 1):
-            result = await verifier.verify(artifact)
+            result = await verifier.verify(artifact, synergy_goal)
             combined_log.append(f"--- Step {index} ({verifier.__class__.__name__}) ---\n{result.output_log}")
             if not result.is_success:
                 return VerificationResult(
@@ -81,7 +81,7 @@ class LLMVerifier(VerifierStrategy):
         self._client = client
         self._evaluation_prompt = evaluation_prompt
 
-    async def verify(self, artifact: Artifact) -> VerificationResult:
+    async def verify(self, artifact: Artifact, synergy_goal: str = "") -> VerificationResult:
         artifact.save()
 
         system_content = (
@@ -89,6 +89,11 @@ class LLMVerifier(VerifierStrategy):
             "Потребуется вернуть результат строго в формате JSON:\n"
             '{"is_success": true/false, "reason": "текст"}'
         )
+        if synergy_goal:
+            system_content += (
+                f"\nПри оценке артефакта строго учитывай главную цель команды: {synergy_goal}. "
+                "Артефакт должен способствовать ее достижению."
+            )
         user_content = (
             f"Содержимое артефакта:\n\n{artifact.content}\n\n"
             'Оцени артефакт выше и верни ответ строго в JSON формате: {"is_success": true/false, "reason": "..."}'
