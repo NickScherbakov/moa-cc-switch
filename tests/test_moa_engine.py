@@ -127,4 +127,58 @@ async def test_orchestrator_cumulative_error_history(respx_mock, monkeypatch):
         os.remove("test_fail_output.py")
 
 
+@pytest.mark.asyncio
+async def test_orchestrator_action_execution_phase(respx_mock, monkeypatch):
+    monkeypatch.setenv("MOCK_KEY", "mock-token")
+    from moa_engine.tools import BaseTool, ToolRegistry
+
+    class LocalDummyTool(BaseTool):
+        @property
+        def name(self) -> str:
+            return "dummy_tool"
+
+        @property
+        def description(self) -> str:
+            return "Local dummy tool"
+
+        @property
+        def input_schema(self) -> dict:
+            return {"type": "object"}
+
+        async def execute(self, param: str, **kwargs):
+            return f"Executed dummy tool: {param}"
+
+    registry = ToolRegistry()
+    registry.register(LocalDummyTool())
+
+    # Mock aggregator returning JSON actions
+    json_response = (
+        '{"code": "print(\'done\')", "actions": [{"tool_name": "dummy_tool", "arguments": {"param": "test_param"}}]}'
+    )
+    respx_mock.post("http://localhost:8080/v1/chat/completions").respond(
+        json={"choices": [{"message": {"content": json_response}}]}
+    )
+
+    client = CCSwitchClient("test-provider", "http://localhost:8080", "MOCK_KEY")
+    proposer = ProposerAgent(client)
+    aggregator = AggregatorAgent(client)
+    verifier = CommandVerifier("python -c \"import sys; sys.exit(1)\"")
+
+    orchestrator = MoAOrchestrator(
+        proposers=[proposer],
+        aggregator=aggregator,
+        verifier=verifier,
+        output_path="test_tool_output.py",
+        max_iterations=1,
+        tools=registry,
+    )
+
+    success = await orchestrator.run_until_proven("Tool Execution Task", synergy_goal="Run tools")
+    assert success is False
+    if os.path.exists("test_tool_output.py"):
+        os.remove("test_tool_output.py")
+
+
+
+
 

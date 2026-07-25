@@ -62,3 +62,37 @@ async def test_synergy_goal_prompt_injection(respx_mock, monkeypatch):
         assert goal_marker in user_msg["content"]
         assert synergy_text in user_msg["content"]
 
+
+@pytest.mark.asyncio
+async def test_agent_tools_prompt_injection(respx_mock, monkeypatch):
+    monkeypatch.setenv("TEST_KEY", "mock-token")
+    captured_messages = []
+
+    def capture_handler(request):
+        import json
+        body = json.loads(request.content)
+        captured_messages.append(body["messages"])
+
+    respx_mock.post("https://api.openai.com/v1/chat/completions").mock(
+        side_effect=capture_handler,
+    ).respond(
+        json={"choices": [{"message": {"content": "{\"code\": \"print(123)\", \"actions\": []}"}}]}
+    )
+
+    client = CCSwitchClient("openai", "https://api.openai.com", "TEST_KEY")
+    from moa_engine.domain import Tool
+
+    tool = Tool(name="terminal_execution", description="Run shell command", input_schema={"type": "object"})
+    proposer = ProposerAgent(client, tools=[tool])
+    aggregator = AggregatorAgent(client, tools=[tool])
+
+    task = Task(description="Run command task")
+    await proposer.process(task)
+    await aggregator.process_proposals(task, ["proposal 1"])
+
+    for msgs in captured_messages:
+        sys_msg = next(m for m in msgs if m["role"] == "system")
+        assert "terminal_execution" in sys_msg["content"]
+        assert "Run shell command" in sys_msg["content"]
+
+

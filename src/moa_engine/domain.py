@@ -37,3 +37,17 @@ class Artifact:
     def save(self) -> None:
         with open(self.path, "w", encoding="utf-8") as f:
             f.write(self.content)
+
+
+@dataclass(frozen=True)
+class Tool:
+    name: str
+    description: str
+    input_schema: dict
+
+
+@dataclass(frozen=True)
+class Action:
+    tool_name: str
+    arguments: dict
+

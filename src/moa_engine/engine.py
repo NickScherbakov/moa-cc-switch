@@ -9,8 +9,9 @@ from rich.panel import Panel
 
 from moa_engine.agents import AggregatorAgent, CriticAgent, ProposerAgent
 from moa_engine.clients import is_error_response
-from moa_engine.domain import Artifact, DiscoveryState, Message, Task
+from moa_engine.domain import Action, Artifact, DiscoveryState, Message, Task
 from moa_engine.reporter import ExecutionReporter
+from moa_engine.tools import ToolRegistry
 from moa_engine.verifiers import VerifierStrategy
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -31,6 +32,7 @@ class MoAOrchestrator:
         critic: Optional[CriticAgent] = None,
         reporter: Optional[ExecutionReporter] = None,
         max_iterations: int = 50,
+        tools: Optional[ToolRegistry] = None,
     ):
         self._proposers = proposers
         self._aggregator = aggregator
@@ -39,6 +41,16 @@ class MoAOrchestrator:
         self._critic = critic
         self._reporter = reporter or ExecutionReporter()
         self._max_iterations = max_iterations
+        self._tools = tools or ToolRegistry()
+
+        # Inject tool specifications into all agents if tools are registered
+        tool_specs = self._tools.list_tools()
+        if tool_specs:
+            for agent in self._proposers:
+                agent.set_tools(tool_specs)
+            if self._critic:
+                self._critic.set_tools(tool_specs)
+            self._aggregator.set_tools(tool_specs)
 
     async def run_discovery_chat(self, initial_idea: str) -> str:
         """Run interactive Discovery Chat with continuous context compression (Rolling Summary)."""
@@ -144,12 +156,50 @@ class MoAOrchestrator:
                     print(f"⚠️ Critic agent raised exception: {e}", file=sys.stderr)
 
             agg_name = self._aggregator._client.__class__.__name__
-            code = await self._aggregator.process_proposals(task, proposals, critique=critique)
-            if is_error_response(code):
+            agg_raw = await self._aggregator.process_proposals(task, proposals, critique=critique)
+
+            code = agg_raw
+            actions_to_run: List[Action] = []
+
+            if not is_error_response(agg_raw):
+                # Try to parse JSON from Aggregator response if tools are available/actions requested
+                json_match = re.search(r"\{.*\}", agg_raw, re.DOTALL)
+                if json_match:
+                    try:
+                        parsed = json.loads(json_match.group(0))
+                        if isinstance(parsed, dict):
+                            if "code" in parsed:
+                                code = str(parsed["code"])
+                            raw_actions = parsed.get("actions", [])
+                            if isinstance(raw_actions, list):
+                                for act in raw_actions:
+                                    if isinstance(act, dict) and "tool_name" in act:
+                                        actions_to_run.append(
+                                            Action(
+                                                tool_name=str(act["tool_name"]),
+                                                arguments=dict(act.get("arguments", act.get("args", {}))),
+                                            )
+                                        )
+                    except Exception as e:
+                        console.print(f"[yellow]⚠️ Ошибка парсинга JSON от Агрегатора: {e}[/yellow]")
+                console.print(f"[cyan]🧠 {agg_name} синтезировал итоговый код[/cyan]")
+            else:
                 print("⚠️ Aggregator returned error, falling back to longest valid proposal.", file=sys.stderr)
                 code = max(proposals, key=len)
-            else:
-                console.print(f"[cyan]🧠 {agg_name} синтезировал итоговый код[/cyan]")
+
+            # Phase 4: Execution Phase (Action Layer)
+            tool_outputs: List[str] = []
+            if actions_to_run:
+                console.print(f"\n[bold blue]⚡ Фаза Исполнения: Запуск {len(actions_to_run)} действий через ToolRegistry...[/bold blue]")
+                for action in actions_to_run:
+                    console.print(Panel(
+                        f"Инструмент: [bold]{action.tool_name}[/bold]\nАргументы: {action.arguments}",
+                        title="Выполнение инструмента",
+                        border_style="blue"
+                    ))
+                    tool_res = await self._tools.execute(action)
+                    console.print(Panel(tool_res, title=f"Результат {action.tool_name}", border_style="cyan"))
+                    tool_outputs.append(f"Инструмент '{action.tool_name}' (аргументы: {action.arguments}):\n{tool_res}")
 
             artifact = Artifact(path=self._output_path, content=code)
 
@@ -183,11 +233,20 @@ class MoAOrchestrator:
                 return True
 
             print("❌ Проверка не пройдена. Обновление истории ошибок...")
+            tool_history_chunk = ""
+            if tool_outputs:
+                tool_history_chunk = (
+                    f"\n\n--- Результаты выполнения инструментов (Итерация {iteration}) ---\n"
+                    + "\n".join(tool_outputs)
+                )
+
             task = Task(
                 description=task_description,
                 synergy_goal=synergy_goal,
                 error_history=(
-                    task.error_history + f"\n\n--- Ошибки Итерации {iteration} ---\n{result.output_log}"
+                    task.error_history
+                    + tool_history_chunk
+                    + f"\n\n--- Ошибки Итерации {iteration} ---\n{result.output_log}"
                 ),
             )
 
@@ -195,3 +254,4 @@ class MoAOrchestrator:
         self._reporter.generate_markdown_report()
         self._reporter.generate_json_trace()
         return False
+
