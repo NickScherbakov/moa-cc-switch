@@ -9,6 +9,7 @@ def test_preset_config_json_roundtrip(tmp_path):
         description="Test Preset Description",
         max_iterations=10,
         output_path="out.py",
+        synergy_goal="Создать безопасное и быстрое решение",
         verifier_config={"type": "command", "command": "python test.py"},
         proposers=[
             AgentConfig(name="prop1", role="proposer", provider="openai", model="gpt-4o", system_prompt="Prompt 1"),
@@ -23,6 +24,7 @@ def test_preset_config_json_roundtrip(tmp_path):
 
     loaded = PresetConfig.from_json(str(json_file))
     assert loaded.preset_name == "test_preset"
+    assert loaded.synergy_goal == "Создать безопасное и быстрое решение"
     assert loaded.verifier_config == {"type": "command", "command": "python test.py"}
     assert loaded.verify_cmd == "python test.py"
     assert len(loaded.proposers) == 2
@@ -36,6 +38,7 @@ def test_preset_config_yaml_roundtrip(tmp_path):
     preset = PresetConfig(
         preset_name="yaml_preset",
         description="YAML Preset",
+        synergy_goal="Goal YAML",
         proposers=[AgentConfig(name="p1", role="proposer", provider="ollama", model="llama3")],
     )
 
@@ -44,6 +47,7 @@ def test_preset_config_yaml_roundtrip(tmp_path):
 
     loaded = PresetConfig.from_yaml(str(yaml_file))
     assert loaded.preset_name == "yaml_preset"
+    assert loaded.synergy_goal == "Goal YAML"
     assert loaded.proposers[0].model == "llama3"
 
 

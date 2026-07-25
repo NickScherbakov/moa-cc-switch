@@ -15,7 +15,11 @@ def test_domain_dataclasses():
 
     task = Task(description="build something")
     assert task.description == "build something"
+    assert task.synergy_goal == ""
     assert "Ошибок нет" in task.error_history
+
+    task_synergy = Task(description="build something", synergy_goal="High quality")
+    assert task_synergy.synergy_goal == "High quality"
 
     vr = VerificationResult(is_success=True, output_log="OK")
     assert vr.is_success is True
@@ -69,7 +73,6 @@ async def test_orchestrator_flow(respx_mock, monkeypatch):
     aggregator = AggregatorAgent(client)
     verifier = CommandVerifier("python -c \"import os; assert os.path.exists('test_output.py')\"")
 
-
     orchestrator = MoAOrchestrator(
         proposers=[proposer],
         aggregator=aggregator,
@@ -78,7 +81,7 @@ async def test_orchestrator_flow(respx_mock, monkeypatch):
         max_iterations=3,
     )
 
-    success = await orchestrator.run_until_proven("Implement LRU Cache")
+    success = await orchestrator.run_until_proven("Implement LRU Cache", synergy_goal="Perfect code")
     assert success is True
     assert os.path.exists("test_output.py")
     if os.path.exists("test_output.py"):
@@ -118,7 +121,7 @@ async def test_orchestrator_cumulative_error_history(respx_mock, monkeypatch):
         max_iterations=2,
     )
 
-    success = await orchestrator.run_until_proven("Failing Task")
+    success = await orchestrator.run_until_proven("Failing Task", synergy_goal="High quality")
     assert success is False
     if os.path.exists("test_fail_output.py"):
         os.remove("test_fail_output.py")

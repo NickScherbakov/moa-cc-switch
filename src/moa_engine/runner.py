@@ -144,6 +144,7 @@ async def main(args: argparse.Namespace) -> None:
         verifier = CommandVerifier("pytest tests/test_lru_cache.py")
 
     max_iterations = preset.max_iterations if preset else 50
+    synergy_goal = args.goal or (preset.synergy_goal if preset else "")
 
     orchestrator = MoAOrchestrator(
         proposers=proposers,
@@ -154,7 +155,7 @@ async def main(args: argparse.Namespace) -> None:
         max_iterations=max_iterations,
     )
 
-    success = await orchestrator.run_until_proven(task_desc)
+    success = await orchestrator.run_until_proven(task_desc, synergy_goal=synergy_goal)
     if success:
         console.print("[bold green]✨ Orchestration completed successfully![/bold green]")
         console.print("[cyan]Generated reports: moa_report.html, moa_report.md, moa_trace.json[/cyan]")
@@ -168,6 +169,7 @@ def cli() -> None:
     """CLI entry point for running the MoA Engine with Rich UI & Preset support."""
     parser = argparse.ArgumentParser(description="Autonomous MoA Engine")
     parser.add_argument("--task", help="Описание задачи")
+    parser.add_argument("--goal", help="Цель синергического мышления команды")
     parser.add_argument("--verify", help="Команда верификации")
     parser.add_argument("--out", default="result.py", help="Файл для сохранения")
     parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")

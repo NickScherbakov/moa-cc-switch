@@ -36,6 +36,15 @@ class ProposerAgent(Agent):
             )
 
     async def process(self, task: Task) -> str:
+        user_content = (
+            f"Задача: {task.description}\n\n"
+            f"История ошибок предыдущих запусков:\n{task.error_history}"
+        )
+        if task.synergy_goal:
+            user_content += (
+                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+            )
         messages = [
             Message(
                 role="system",
@@ -43,10 +52,7 @@ class ProposerAgent(Agent):
             ),
             Message(
                 role="user",
-                content=(
-                    f"Задача: {task.description}\n\n"
-                    f"История ошибок предыдущих запусков:\n{task.error_history}"
-                ),
+                content=user_content,
             ),
         ]
         return await self._client.generate(messages, temperature=self.temperature)
@@ -63,6 +69,12 @@ class CriticAgent(Agent):
             )
 
     async def process(self, task: Task) -> str:
+        user_content = f"Задача: {task.description}\nОшибки: {task.error_history}"
+        if task.synergy_goal:
+            user_content += (
+                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+            )
         messages = [
             Message(
                 role="system",
@@ -70,7 +82,7 @@ class CriticAgent(Agent):
             ),
             Message(
                 role="user",
-                content=f"Задача: {task.description}\nОшибки: {task.error_history}",
+                content=user_content,
             ),
         ]
         return await self._client.generate(messages, temperature=0.2)
@@ -93,6 +105,19 @@ class AggregatorAgent(Agent):
         )
         critique_section = f"\nЗамечания критика:\n{critique}\n" if critique else ""
         
+        user_content = (
+            f"Задача: {task.description}\n\n"
+            f"Предложения от агентов:\n{proposals_formatted}\n"
+            f"{critique_section}\n"
+            f"История ошибок:\n{task.error_history}\n\n"
+            "Верните ТОЛЬКО итоговый Python-код."
+        )
+        if task.synergy_goal:
+            user_content += (
+                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+            )
+
         messages = [
             Message(
                 role="system",
@@ -100,18 +125,18 @@ class AggregatorAgent(Agent):
             ),
             Message(
                 role="user",
-                content=(
-                    f"Задача: {task.description}\n\n"
-                    f"Предложения от агентов:\n{proposals_formatted}\n"
-                    f"{critique_section}\n"
-                    f"История ошибок:\n{task.error_history}\n\n"
-                    "Верните ТОЛЬКО итоговый Python-код."
-                ),
+                content=user_content,
             ),
         ]
         return await self._client.generate(messages, temperature=0.2)
 
     async def process(self, task: Task) -> str:
+        user_content = f"Выполните задачу: {task.description}"
+        if task.synergy_goal:
+            user_content += (
+                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+            )
         messages = [
             Message(
                 role="system",
@@ -119,7 +144,7 @@ class AggregatorAgent(Agent):
             ),
             Message(
                 role="user",
-                content=f"Выполните задачу: {task.description}",
+                content=user_content,
             )
         ]
         return await self._client.generate(messages)

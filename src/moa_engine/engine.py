@@ -37,9 +37,9 @@ class MoAOrchestrator:
         self._reporter = reporter or ExecutionReporter()
         self._max_iterations = max_iterations
 
-    async def run_until_proven(self, task_description: str) -> bool:
+    async def run_until_proven(self, task_description: str, synergy_goal: str = "") -> bool:
         """Run Mixture-of-Agents loop iteratively until verification succeeds or max iterations reached."""
-        task = Task(description=task_description)
+        task = Task(description=task_description, synergy_goal=synergy_goal)
 
         for iteration in range(1, self._max_iterations + 1):
             print(f"\n--- Итерация {iteration}/{self._max_iterations} ---")
@@ -106,7 +106,12 @@ class MoAOrchestrator:
             )
 
             if result.is_success:
-                print("\n✅ Задача успешно и доказуемо решена!")
+                if synergy_goal:
+                    console.print(
+                        f"\n[bold green]🏆 В результате синергического мышления команды была достигнута цель:[/bold green]\n[italic green]{synergy_goal}[/italic green]"
+                    )
+                else:
+                    print("\n✅ Задача успешно и доказуемо решена!")
                 self._reporter.generate_html_report()
                 self._reporter.generate_markdown_report()
                 self._reporter.generate_json_trace()
@@ -115,6 +120,7 @@ class MoAOrchestrator:
             print("❌ Проверка не пройдена. Обновление истории ошибок...")
             task = Task(
                 description=task_description,
+                synergy_goal=synergy_goal,
                 error_history=(
                     task.error_history + f"\n\n--- Ошибки Итерации {iteration} ---\n{result.output_log}"
                 ),

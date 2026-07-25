@@ -10,6 +10,7 @@ class Message:
 @dataclass(frozen=True)
 class Task:
     description: str
+    synergy_goal: str = ""
     error_history: str = "Ошибок нет. Первая итерация."
 
 

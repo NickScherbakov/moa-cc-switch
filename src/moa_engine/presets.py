@@ -22,6 +22,7 @@ class PresetConfig:
     description: str
     max_iterations: int = 50
     output_path: str = "result.py"
+    synergy_goal: str = ""
     verifier_config: Optional[Dict[str, Any]] = None
     proposers: List[AgentConfig] = field(default_factory=list)
     critic: Optional[AgentConfig] = None
@@ -66,6 +67,7 @@ class PresetConfig:
             description=data.get("description", ""),
             max_iterations=data.get("max_iterations", 50),
             output_path=data.get("output_path", "result.py"),
+            synergy_goal=data.get("synergy_goal", ""),
             verifier_config=verifier_config,
             proposers=proposers,
             critic=critic,
