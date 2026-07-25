@@ -155,6 +155,24 @@ async def main(args: argparse.Namespace) -> None:
         max_iterations=max_iterations,
     )
 
+    if args.interactive:
+        console.clear()
+        console.print(
+            Panel.fit(
+                "[bold cyan]💬 Discovery Chat (Интерактивный режим)[/bold cyan]\n"
+                "Обсудите с командой агентов ваши требования. Когда ТЗ будет готово, "
+                "введите [bold yellow]/execute[/bold yellow] для старта генерации.",
+                title="MoA Engine Discovery Mode",
+            )
+        )
+        task_desc = await orchestrator.run_discovery_chat(initial_idea=task_desc)
+        console.print(
+            Panel.fit(
+                f"[bold green]📋 Итоговое ТЗ (сжатое Агрегатором):[/bold green]\n{task_desc}",
+                title="Discovery Phase Complete",
+            )
+        )
+
     success = await orchestrator.run_until_proven(task_desc, synergy_goal=synergy_goal)
     if success:
         console.print("[bold green]✨ Orchestration completed successfully![/bold green]")
@@ -174,6 +192,7 @@ def cli() -> None:
     parser.add_argument("--out", default="result.py", help="Файл для сохранения")
     parser.add_argument("--preset", help="Путь к файлу пресета конфигурации (.yaml или .json)")
     parser.add_argument("--context-url", nargs="+", help="URL(s) to fetch and append to the task description")
+    parser.add_argument("-i", "--interactive", action="store_true", help="Запустить режим Discovery Chat")
     args = parser.parse_args()
 
     asyncio.run(main(args))
@@ -182,3 +201,4 @@ def cli() -> None:
 
 if __name__ == "__main__":
     cli()
+

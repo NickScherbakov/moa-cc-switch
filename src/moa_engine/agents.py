@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from moa_engine.clients import LLMClient
-from moa_engine.domain import Message, Task
+from moa_engine.domain import DiscoveryState, Message, Task
 
 
 class Agent(ABC):
@@ -13,8 +13,8 @@ class Agent(ABC):
         self.system_prompt = system_prompt
 
     @abstractmethod
-    async def process(self, task: Task) -> str:
-        """Process a task and generate a code output or proposal."""
+    async def process(self, task: Union[Task, DiscoveryState]) -> str:
+        """Process a task or discovery state and generate a response."""
         pass
 
 
@@ -35,16 +35,24 @@ class ProposerAgent(Agent):
                 "для решения указанной задачи без дополнительных пояснений."
             )
 
-    async def process(self, task: Task) -> str:
-        user_content = (
-            f"Задача: {task.description}\n\n"
-            f"История ошибок предыдущих запусков:\n{task.error_history}"
-        )
-        if task.synergy_goal:
-            user_content += (
-                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
-                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+    async def process(self, task: Union[Task, DiscoveryState]) -> str:
+        if isinstance(task, DiscoveryState):
+            user_content = f"Текущая выжимка требований:\n{task.current_summary}"
+            if task.chat_history:
+                history_lines = [
+                    f"{m.name or m.role}: {m.content}" for m in task.chat_history
+                ]
+                user_content += "\n\nТекущий шаг обсуждения:\n" + "\n".join(history_lines)
+        else:
+            user_content = (
+                f"Задача: {task.description}\n\n"
+                f"История ошибок предыдущих запусков:\n{task.error_history}"
             )
+            if task.synergy_goal:
+                user_content += (
+                    f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                    "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+                )
         messages = [
             Message(
                 role="system",
@@ -68,13 +76,21 @@ class CriticAgent(Agent):
                 "Вы — старейший ревьюер кода (Critic). Проанализируйте задачу и дайте критические указания по потенциальным багам."
             )
 
-    async def process(self, task: Task) -> str:
-        user_content = f"Задача: {task.description}\nОшибки: {task.error_history}"
-        if task.synergy_goal:
-            user_content += (
-                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
-                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
-            )
+    async def process(self, task: Union[Task, DiscoveryState]) -> str:
+        if isinstance(task, DiscoveryState):
+            user_content = f"Текущая выжимка требований:\n{task.current_summary}"
+            if task.chat_history:
+                history_lines = [
+                    f"{m.name or m.role}: {m.content}" for m in task.chat_history
+                ]
+                user_content += "\n\nТекущий шаг обсуждения:\n" + "\n".join(history_lines)
+        else:
+            user_content = f"Задача: {task.description}\nОшибки: {task.error_history}"
+            if task.synergy_goal:
+                user_content += (
+                    f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                    "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+                )
         messages = [
             Message(
                 role="system",
@@ -98,6 +114,43 @@ class AggregatorAgent(Agent):
                 "Вы — главный архитектор кода (Aggregator). Объедините лучшие идеи "
                 "из предложенных вариантов в один безупречный итоговый Python-код."
             )
+
+    async def process_discovery(self, state: DiscoveryState, proposals: List[str], critique: str = "") -> str:
+        proposals_formatted = "\n---\n".join(
+            [f"Вариант {i+1}:\n{p}" for i, p in enumerate(proposals)]
+        )
+        critique_section = f"\nЗамечания критика:\n{critique}\n" if critique else ""
+        history_section = ""
+        if state.chat_history:
+            history_lines = [f"{m.name or m.role}: {m.content}" for m in state.chat_history]
+            history_section = "Текущий шаг обсуждения:\n" + "\n".join(history_lines) + "\n\n"
+
+        system_prompt = (
+            "Вы — Агрегатор в режиме Discovery Chat. Проанализируйте выжимку требований, "
+            "историю шага обсуждения, идеи Пропоузеров и замечания Критика.\n"
+            "Верните ответ СТРОГО в формате JSON без дополнительного текста вокруг:\n"
+            '{"summary": "новая сжатая выжимка всего диалога", "reply": "вопросы или сообщение для пользователя"}'
+        )
+
+        user_content = (
+            f"Текущая выжимка требований:\n{state.current_summary}\n\n"
+            f"{history_section}"
+            f"Предложения от агентов:\n{proposals_formatted}\n"
+            f"{critique_section}\n"
+            "Верните ответ СТРОГО в формате JSON с ключами summary и reply."
+        )
+
+        messages = [
+            Message(
+                role="system",
+                content=system_prompt,
+            ),
+            Message(
+                role="user",
+                content=user_content,
+            ),
+        ]
+        return await self._client.generate(messages, temperature=0.2)
 
     async def process_proposals(self, task: Task, proposals: List[str], critique: str = "") -> str:
         proposals_formatted = "\n---\n".join(
@@ -130,13 +183,16 @@ class AggregatorAgent(Agent):
         ]
         return await self._client.generate(messages, temperature=0.2)
 
-    async def process(self, task: Task) -> str:
-        user_content = f"Выполните задачу: {task.description}"
-        if task.synergy_goal:
-            user_content += (
-                f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
-                "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
-            )
+    async def process(self, task: Union[Task, DiscoveryState]) -> str:
+        if isinstance(task, DiscoveryState):
+            user_content = f"Текущая выжимка требований: {task.current_summary}"
+        else:
+            user_content = f"Выполните задачу: {task.description}"
+            if task.synergy_goal:
+                user_content += (
+                    f"\n\n🎯 ЦЕЛЬ СИНЕРГИЧЕСКОГО МЫШЛЕНИЯ КОМАНДЫ:\n{task.synergy_goal}\n"
+                    "Все твои рассуждения и итоговый ответ должны быть подчинены достижению этой цели."
+                )
         messages = [
             Message(
                 role="system",
@@ -148,3 +204,4 @@ class AggregatorAgent(Agent):
             )
         ]
         return await self._client.generate(messages)
+

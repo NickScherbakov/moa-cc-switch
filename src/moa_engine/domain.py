@@ -1,10 +1,19 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 
 @dataclass(frozen=True)
 class Message:
     role: str
     content: str
+    name: Optional[str] = None
+
+
+@dataclass
+class DiscoveryState:
+    current_summary: str = ""
+    chat_history: List[Message] = field(default_factory=list)
+
 
 
 @dataclass(frozen=True)
