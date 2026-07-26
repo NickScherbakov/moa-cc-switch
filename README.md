@@ -5,9 +5,22 @@
 [![Architecture: Clean/OOP](https://img.shields.io/badge/architecture-Clean%2FOOP-green.svg)](#-architectural-principles-solid)
 [![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
+> [!IMPORTANT]
+> 📖 **Русскоязычное руководство пользователя (Russian User Manual)**: 
+> Полное, пошагово структурированное и практическое руководство по установке, настройке, ролям роя, Action Layer, Discovery Chat (`-i`), веб-скрейпингу и детерминированной верификации доступно в файле **[РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md](file:///C:/Users/Admin/Documents/antigravity/quirky-hawking/РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md)**.
+
 **moa-cc-switch** is an autonomous cognitive framework built on the **Mixture-of-Agents (MoA)** architecture in Python 3.10+. Designed to solve complex software engineering, architectural, and analytical tasks, it unites diverse Large Language Model (LLM) providers—spanning HTTP APIs (Anthropic Claude, OpenAI GPT, DeepSeek, Ollama) and local CLI tools (Claude CLI, Copilot CLI, Codex CLI, Gemini CLI, Antigravity CLI, Kiro CLI)—into a synergistic, self-correcting cognitive swarm.
 
 The framework closes the **OODA Loop** (Observe, Orient, Decide, Act) by orchestrating multi-agent collaboration with automated routing through **CC Switch**, interactive human-in-the-loop requirement discovery, multi-context web scraping, tool execution (Action Layer), and **deterministic multi-layered verification**.
+
+---
+
+## 📚 Documentation & Guides
+
+| Document | Language | Description |
+| :--- | :---: | :--- |
+| **[РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md](file:///C:/Users/Admin/Documents/antigravity/quirky-hawking/РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md)** | 🇷🇺 RU | Comprehensive User Manual with step-by-step instructions, practical CLI examples, Action Layer explanation, and troubleshooting FAQ. |
+| **[README.md](file:///C:/Users/Admin/Documents/antigravity/quirky-hawking/README.md)** (This File) | 🇬🇧 EN | Technical architecture overview, class diagram, SOLID principles, and contributor sitemap. |
 
 ---
 
